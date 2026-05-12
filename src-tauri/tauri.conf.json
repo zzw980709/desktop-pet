@@ -13,9 +13,15 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "tauri-app",
-        "width": 800,
-        "height": 600
+        "title": "Desktop Pet",
+        "width": 128,
+        "height": 128,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "resizable": false,
+        "focus": false,
+        "visible": true
       }
     ],
     "security": {
