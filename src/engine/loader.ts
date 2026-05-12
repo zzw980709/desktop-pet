@@ -10,6 +10,17 @@ export function validateManifest(data: unknown): CharacterManifest | null {
   if (typeof m.frameHeight !== 'number' || m.frameHeight <= 0) return null;
   if (!m.animations || typeof m.animations !== 'object' || Object.keys(m.animations as object).length === 0) return null;
   if (typeof m.defaultState !== 'string' || !m.defaultState) return null;
+  if (!Object.prototype.hasOwnProperty.call(m.animations as object, m.defaultState)) return null;
+
+  // Validate each animation entry
+  for (const [key, val] of Object.entries(m.animations as object)) {
+    if (!val || typeof val !== 'object') return null;
+    const a = val as Record<string, unknown>;
+    if (typeof a.start !== 'number' || a.start < 0) return null;
+    if (typeof a.end !== 'number' || a.end < a.start) return null;
+    if (typeof a.fps !== 'number' || a.fps <= 0) return null;
+    if (typeof a.loop !== 'boolean') return null;
+  }
 
   return {
     name: m.name,

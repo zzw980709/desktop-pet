@@ -38,6 +38,34 @@ describe('validateManifest', () => {
   it('rejects negative frameWidth', () => {
     expect(validateManifest({ ...valid, frameWidth: -1 })).toBeNull();
   });
+
+  it('rejects frameWidth zero', () => {
+    expect(validateManifest({ ...valid, frameWidth: 0 })).toBeNull();
+  });
+
+  it('rejects defaultState not in animations', () => {
+    expect(validateManifest({ ...valid, defaultState: 'walk' })).toBeNull();
+  });
+
+  it('rejects invalid animation entry (negative start)', () => {
+    const bad = { ...valid, animations: { idle: { start: -1, end: 3, fps: 4, loop: true } } };
+    expect(validateManifest(bad)).toBeNull();
+  });
+
+  it('rejects invalid animation entry (end < start)', () => {
+    const bad = { ...valid, animations: { idle: { start: 3, end: 1, fps: 4, loop: true } } };
+    expect(validateManifest(bad)).toBeNull();
+  });
+
+  it('rejects invalid animation entry (fps <= 0)', () => {
+    const bad = { ...valid, animations: { idle: { start: 0, end: 3, fps: 0, loop: true } } };
+    expect(validateManifest(bad)).toBeNull();
+  });
+
+  it('rejects invalid animation entry (loop not boolean)', () => {
+    const bad = { ...valid, animations: { idle: { start: 0, end: 3, fps: 4, loop: 'yes' } } };
+    expect(validateManifest(bad)).toBeNull();
+  });
 });
 
 describe('totalFrames', () => {
