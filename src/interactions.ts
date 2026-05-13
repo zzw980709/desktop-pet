@@ -25,8 +25,9 @@ export class Interactions {
     this.isDragging = true;
     this.startX = e.screenX;
     this.startY = e.screenY;
-    this.offsetX = e.offsetX;
-    this.offsetY = e.offsetY;
+    const dpr = window.devicePixelRatio || 1;
+    this.offsetX = Math.round(e.offsetX * dpr);
+    this.offsetY = Math.round(e.offsetY * dpr);
     this.dragMoved = false;
   };
 
