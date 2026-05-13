@@ -1,5 +1,5 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { PhysicalPosition } from '@tauri-apps/api/dpi';
+import { LogicalPosition } from '@tauri-apps/api/dpi';
 import type { BehaviorEngine } from './engine/behavior';
 
 export class Interactions {
@@ -25,9 +25,8 @@ export class Interactions {
     this.isDragging = true;
     this.startX = e.screenX;
     this.startY = e.screenY;
-    const dpr = window.devicePixelRatio || 1;
-    this.offsetX = Math.round(e.offsetX * dpr);
-    this.offsetY = Math.round(e.offsetY * dpr);
+    this.offsetX = e.offsetX;
+    this.offsetY = e.offsetY;
     this.dragMoved = false;
   };
 
@@ -44,7 +43,7 @@ export class Interactions {
     if (this.dragMoved) {
       try {
         await getCurrentWindow().setPosition(
-          new PhysicalPosition(e.screenX - this.offsetX, e.screenY - this.offsetY),
+          new LogicalPosition(e.screenX - this.offsetX, e.screenY - this.offsetY),
         );
       } catch (err) {
         console.warn('[interactions] window move failed:', err);
