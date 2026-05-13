@@ -1,38 +1,50 @@
-type StateChangeHandler = (newState: string, oldState: string) => void;
+export type State = 'idle' | 'walk' | 'sleep' | 'sit' | 'drag' | 'react';
+
+type StateChangeHandler = (newState: State, oldState: State) => void;
 type TransitionCondition = () => boolean;
 
 interface Transition {
-  from: string;
-  to: string;
+  from: State;
+  to: State;
   condition: TransitionCondition;
 }
 
+const STATES: State[] = ['idle', 'walk', 'sleep', 'sit', 'drag', 'react'];
+const NON_IDLE: State[] = ['walk', 'sleep', 'sit', 'react'];
+
 export class BehaviorEngine {
-  currentState = 'idle';
+  private _currentState: State = 'idle';
   private transitions: Transition[] = [];
   private listeners: StateChangeHandler[] = [];
   private idleTimer = 0;
+  private rng: () => number;
 
-  constructor() {
+  constructor(rng?: () => number) {
+    this.rng = rng ?? Math.random;
     this.resetIdleTimer();
   }
 
-  on(event: 'stateChange', handler: StateChangeHandler): void {
-    if (event === 'stateChange') this.listeners.push(handler);
+  get currentState(): State {
+    return this._currentState;
   }
 
-  addState(_name: string): void {
-    // State registry for future validation
+  on(handler: StateChangeHandler): void {
+    this.listeners.push(handler);
   }
 
-  addTransition(from: string, to: string, condition: TransitionCondition): void {
+  off(handler: StateChangeHandler): void {
+    const idx = this.listeners.indexOf(handler);
+    if (idx !== -1) this.listeners.splice(idx, 1);
+  }
+
+  addTransition(from: State, to: State, condition: TransitionCondition): void {
     this.transitions.push({ from, to, condition });
   }
 
-  transitionTo(newState: string): void {
-    if (newState === this.currentState) return;
-    const oldState = this.currentState;
-    this.currentState = newState;
+  transitionTo(newState: State): void {
+    if (newState === this._currentState) return;
+    const oldState = this._currentState;
+    this._currentState = newState;
     if (newState === 'idle') this.resetIdleTimer();
     for (const fn of this.listeners) {
       fn(newState, oldState);
@@ -40,7 +52,7 @@ export class BehaviorEngine {
   }
 
   tick(deltaMs: number): void {
-    if (this.currentState === 'idle') {
+    if (this._currentState === 'idle') {
       this.idleTimer -= deltaMs;
       if (this.idleTimer <= 0) {
         this.tryRandomTransition();
@@ -50,7 +62,7 @@ export class BehaviorEngine {
   }
 
   handleClick(): void {
-    if (this.currentState === 'idle' || this.currentState === 'sit') {
+    if (this._currentState === 'idle' || this._currentState === 'sit') {
       this.transitionTo('react');
     }
   }
@@ -64,20 +76,19 @@ export class BehaviorEngine {
   }
 
   handleAnimationEnd(): void {
-    if (this.currentState === 'walk' || this.currentState === 'sleep' || this.currentState === 'sit' || this.currentState === 'react') {
+    if (NON_IDLE.includes(this._currentState)) {
       this.transitionTo('idle');
     }
   }
 
   private resetIdleTimer(): void {
-    // Random interval between 3-8 seconds
-    this.idleTimer = 3000 + Math.random() * 5000;
+    this.idleTimer = 3000 + this.rng() * 5000;
   }
 
   private tryRandomTransition(): void {
     const available = this.transitions.filter((t) => t.from === 'idle' && t.condition());
     if (available.length === 0) return;
-    const chosen = available[Math.floor(Math.random() * available.length)];
+    const chosen = available[Math.floor(this.rng() * available.length)];
     this.transitionTo(chosen.to);
   }
 }
