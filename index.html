@@ -8,21 +8,52 @@
       html, body {
         width: 100%; height: 100%;
         background: transparent;
-        overflow: hidden;
+        overflow: visible;
         user-select: none;
       }
       canvas {
         display: block;
-        width: 100%;
-        height: 100%;
+        position: absolute;
+        top: 0; left: 0;
+        width: 64px; height: 64px;
         image-rendering: crisp-edges;
         image-rendering: pixelated;
+      }
+      #ctx-menu {
+        display: none;
+        flex-direction: column;
+        position: absolute;
+        top: 4px;
+        left: 68px;
+        width: 96px;
+        background: #1a1a2e;
+        border: 2px solid #4a9eff;
+        padding: 4px;
+        gap: 2px;
+        image-rendering: pixelated;
+        z-index: 10;
+      }
+      .ctx-item {
+        background: transparent;
+        border: none;
+        color: #f0f0ee;
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+        text-align: left;
+        padding: 4px 6px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .ctx-item:hover {
+        background: #4a9eff;
+        color: #1a1a2e;
       }
     </style>
     <title>Desktop Pet</title>
   </head>
   <body>
     <canvas id="pet-canvas"></canvas>
+    <div id="ctx-menu"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

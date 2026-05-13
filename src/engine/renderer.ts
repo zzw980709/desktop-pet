@@ -56,6 +56,30 @@ export class Renderer {
     );
   }
 
+  // Pixel heart pattern (7×6), drawn above pet head when clicked
+  private static readonly HEART: [number, number][] = [
+    [1,0],[2,0],[4,0],[5,0],
+    [0,1],[1,1],[2,1],[3,1],[4,1],[5,1],[6,1],
+    [0,2],[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],
+    [1,3],[2,3],[3,3],[4,3],[5,3],
+    [2,4],[3,4],[4,4],
+    [3,5],
+  ];
+
+  drawHeart(alpha: number): void {
+    if (alpha <= 0) return;
+    const s = this.scale;
+    const cx = Math.floor(this.canvas.width / 2) - 3 * s;
+    const cy = 2;
+    this.ctx.save();
+    this.ctx.globalAlpha = alpha;
+    this.ctx.fillStyle = '#ff6699';
+    for (const [px, py] of Renderer.HEART) {
+      this.ctx.fillRect(cx + px * s, cy + py * s, s, s);
+    }
+    this.ctx.restore();
+  }
+
   drawBubble(bubbleText: string): void {
     const fontSize = 8;
     const padding = 4;

@@ -32,10 +32,10 @@ describe('BehaviorEngine', () => {
     expect(engine.currentState).toBe('react');
   });
 
-  it('click does not trigger react from walk', () => {
+  it('click triggers react from walk', () => {
     engine.transitionTo('walk');
     engine.handleClick();
-    expect(engine.currentState).toBe('walk');
+    expect(engine.currentState).toBe('react');
   });
 
   it('drag interrupts any state', () => {

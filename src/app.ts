@@ -4,6 +4,7 @@ import { Animator } from './engine/animator';
 import { BehaviorEngine } from './engine/behavior';
 import { ReminderSystem } from './engine/bubble';
 import { Interactions } from './interactions';
+import { ContextMenu } from './ui/contextmenu';
 import { getCatSpritesheetURL } from './characters/cat/generator';
 import catManifestRaw from './characters/cat/manifest.json';
 
@@ -27,34 +28,66 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
   const animator = new Animator(manifest);
   const behavior = new BehaviorEngine();
   const reminders = new ReminderSystem(manifest);
+  const menu = new ContextMenu();
 
-  // Register random transitions from idle (weighted by condition probability)
+  // Register random transitions from idle
   behavior.addTransition('idle', 'walk', () => true);
   behavior.addTransition('idle', 'sleep', () => Math.random() < 0.25);
   behavior.addTransition('idle', 'sit', () => Math.random() < 0.15);
 
-  // Wire animator -> behavior: when non-looping animation ends, transition to idle
+  // Heart effect state
+  let heartAlpha = 0;
+  const HEART_DURATION = 600;
+  let heartTimer = 0;
+
+  // Wire animator -> behavior
   animator.on(() => {
     behavior.handleAnimationEnd();
   });
 
-  // Wire behavior -> animator: when state changes, play corresponding animation
+  // Wire behavior -> animator
   behavior.on((newState) => {
     animator.play(newState);
+    if (newState === 'react') {
+      heartAlpha = 1;
+      heartTimer = HEART_DURATION;
+    }
   });
 
-  // Wire reminders -> behavior + animator: reminder triggers reaction
+  // Wire reminders -> behavior + animator
   reminders.on((_message, animation) => {
     animator.play(animation);
     behavior.transitionTo('react');
   });
 
+  // Context menu actions
+  menu.on((action) => {
+    switch (action) {
+      case 'pet':
+        behavior.forceState('react');
+        break;
+      case 'sleep':
+        behavior.forceState('sleep');
+        break;
+      case 'sit':
+        behavior.forceState('sit');
+        break;
+      case 'walk':
+        behavior.forceState('walk');
+        break;
+      case 'feed':
+        behavior.forceState('react');
+        reminders.showBubble('好吃！');
+        break;
+    }
+  });
+
   // Setup interactions
   new Interactions(canvas, behavior);
 
-  // Right-click menu handler
+  // Right-click opens menu
   window.addEventListener('pet:contextmenu', (() => {
-    console.log('[app] context menu triggered');
+    void menu.show();
   }) as EventListener);
 
   // Main loop
@@ -71,8 +104,12 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
     renderer.drawFrame(animator.currentFrame);
 
     const bubble = reminders.getBubbleToDraw();
-    if (bubble) {
-      renderer.drawBubble(bubble.text);
+    if (bubble) renderer.drawBubble(bubble.text);
+
+    if (heartAlpha > 0) {
+      heartTimer -= deltaMs;
+      heartAlpha = Math.max(0, heartTimer / HEART_DURATION);
+      renderer.drawHeart(heartAlpha);
     }
 
     requestAnimationFrame(loop);
@@ -80,3 +117,4 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
 
   requestAnimationFrame(loop);
 }
+

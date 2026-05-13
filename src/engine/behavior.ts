@@ -61,9 +61,13 @@ export class BehaviorEngine {
   }
 
   handleClick(): void {
-    if (this._currentState === 'idle' || this._currentState === 'sit') {
+    if (this._currentState !== 'drag') {
       this.transitionTo('react');
     }
+  }
+
+  forceState(state: State): void {
+    this.transitionTo(state);
   }
 
   handleDragStart(): void {

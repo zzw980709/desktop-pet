@@ -49,6 +49,11 @@ export class ReminderSystem {
     }
   }
 
+  showBubble(text: string): void {
+    this.activeBubble = { text, elapsed: 0 };
+    this.bubbleTimer = 0;
+  }
+
   getBubbleToDraw(): Bubble | null {
     return this.activeBubble;
   }
