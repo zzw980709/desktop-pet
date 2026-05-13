@@ -58,10 +58,32 @@ describe('Animator', () => {
 
   it('emits animationEnd event when non-looping animation finishes', () => {
     const handler = vi.fn();
-    animator.on('animationEnd', handler);
+    animator.on(handler);
     animator.play('react');
     animator.tick(600); // fps=2 so 500ms per frame
     animator.tick(600); // enough to finish 2 frames
     expect(handler).toHaveBeenCalled();
+  });
+
+  it('does not re-emit animationEnd on subsequent ticks', () => {
+    const handler = vi.fn();
+    animator.on(handler);
+    animator.play('react');
+    animator.tick(600);
+    animator.tick(600); // finishes
+    expect(handler).toHaveBeenCalledTimes(1);
+    animator.tick(600); // extra tick after finish
+    animator.tick(600);
+    expect(handler).toHaveBeenCalledTimes(1); // still only once
+  });
+
+  it('off removes listener', () => {
+    const handler = vi.fn();
+    animator.on(handler);
+    animator.off(handler);
+    animator.play('react');
+    animator.tick(600);
+    animator.tick(600);
+    expect(handler).not.toHaveBeenCalled();
   });
 });

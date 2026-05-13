@@ -1,6 +1,5 @@
 import type { CharacterManifest } from '../types';
 
-type EventName = 'animationEnd';
 type EventHandler = () => void;
 
 export class Animator {
@@ -8,7 +7,8 @@ export class Animator {
   currentFrame: number;
   private elapsed: number = 0;
   private frameDuration: number = 0;
-  private listeners: Map<EventName, Set<EventHandler>> = new Map();
+  private handlers: EventHandler[] = [];
+  private finished = false;
 
   constructor(private manifest: CharacterManifest) {
     const initial = manifest.defaultState;
@@ -18,13 +18,19 @@ export class Animator {
     this.frameDuration = anim ? 1000 / anim.fps : 250;
   }
 
-  on(event: EventName, handler: EventHandler): void {
-    if (!this.listeners.has(event)) this.listeners.set(event, new Set());
-    this.listeners.get(event)!.add(handler);
+  on(handler: EventHandler): void {
+    this.handlers.push(handler);
   }
 
-  private emit(event: EventName): void {
-    this.listeners.get(event)?.forEach((fn) => fn());
+  off(handler: EventHandler): void {
+    const idx = this.handlers.indexOf(handler);
+    if (idx !== -1) this.handlers.splice(idx, 1);
+  }
+
+  private emit(): void {
+    for (const fn of this.handlers) {
+      try { fn(); } catch { /* isolate handler errors */ }
+    }
   }
 
   play(name: string): void {
@@ -34,6 +40,7 @@ export class Animator {
     this.currentAnimation = name;
     this.currentFrame = anim.start;
     this.elapsed = 0;
+    this.finished = false;
     this.frameDuration = 1000 / anim.fps;
   }
 
@@ -54,7 +61,10 @@ export class Animator {
     } else {
       if (newFrame > anim.end) {
         this.currentFrame = anim.end;
-        this.emit('animationEnd');
+        if (!this.finished) {
+          this.finished = true;
+          this.emit();
+        }
       } else {
         this.currentFrame = newFrame;
       }
