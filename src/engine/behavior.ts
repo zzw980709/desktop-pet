@@ -9,7 +9,6 @@ interface Transition {
   condition: TransitionCondition;
 }
 
-const STATES: State[] = ['idle', 'walk', 'sleep', 'sit', 'drag', 'react'];
 const NON_IDLE: State[] = ['walk', 'sleep', 'sit', 'react'];
 
 export class BehaviorEngine {

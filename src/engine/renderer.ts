@@ -10,7 +10,7 @@ export class Renderer {
   readonly frameWidth: number;
   readonly frameHeight: number;
 
-  constructor(private canvas: HTMLCanvasElement, private manifest: CharacterManifest) {
+  constructor(private canvas: HTMLCanvasElement, manifest: CharacterManifest) {
     this.ctx = canvas.getContext('2d')!;
     this.scale = manifest.scale;
     this.frameWidth = manifest.frameWidth;

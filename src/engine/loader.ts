@@ -13,7 +13,7 @@ export function validateManifest(data: unknown): CharacterManifest | null {
   if (!Object.prototype.hasOwnProperty.call(m.animations as object, m.defaultState)) return null;
 
   // Validate each animation entry
-  for (const [key, val] of Object.entries(m.animations as object)) {
+  for (const [, val] of Object.entries(m.animations as object)) {
     if (!val || typeof val !== 'object') return null;
     const a = val as Record<string, unknown>;
     if (typeof a.start !== 'number' || a.start < 0) return null;
