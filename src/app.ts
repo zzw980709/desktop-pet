@@ -1,3 +1,6 @@
+import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { LogicalPosition } from '@tauri-apps/api/dpi';
 import { loadPet } from './engine/loader';
 import { Renderer } from './engine/renderer';
 import { Animator } from './engine/animator';
@@ -8,7 +11,7 @@ import { NativeAppMenu } from './ui/appmenu';
 import type { MenuAction } from './ui/menu-model';
 import { CELL_HEIGHT, CELL_WIDTH } from './pets/contract';
 import { discoverPets } from './pets/catalog';
-import type { PetCatalogEntry } from './types';
+import type { PetCatalogEntry, Preferences } from './types';
 
 const DRAG_ANIMATED_STATES = new Set(['running-right', 'running-left']);
 
@@ -18,11 +21,38 @@ function getRenderScale(canvas: HTMLCanvasElement): number {
   return Math.min(widthScale, heightScale) || 1;
 }
 
+interface AddPetResult {
+  success: boolean;
+  petId?: string;
+  error?: string;
+}
+
+interface RemovePetResult {
+  success: boolean;
+  error?: string;
+}
+
 export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
+  const prefs = await invoke<Preferences>('load_preferences');
+
+  if (prefs.windowPosition) {
+    try {
+      await getCurrentWindow().setPosition(
+        new LogicalPosition(prefs.windowPosition.x, prefs.windowPosition.y),
+      );
+    } catch {
+      // window position restore is best-effort
+    }
+  }
+
   let pets = await discoverPets();
-  const initialPet = pets[0];
-  if (!initialPet) {
+  if (pets.length === 0) {
     console.error('No pets available');
+    return;
+  }
+
+  const preferredPet = pets.find((p) => p.id === prefs.activePetId) ?? pets[0];
+  if (!preferredPet) {
     return;
   }
 
@@ -32,22 +62,33 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
   const nativeMenu = new NativeAppMenu();
   const renderScale = getRenderScale(canvas);
   let renderer = new Renderer(canvas, renderScale);
-  let activePet = initialPet;
+  let activePet = preferredPet;
   let petLoadVersion = 0;
+
+  async function savePrefs(): Promise<void> {
+    try {
+      const pos = await getCurrentWindow().outerPosition();
+      await invoke('save_preferences', {
+        preferences: {
+          activePetId: activePet.id,
+          windowPosition: { x: pos.x, y: pos.y },
+        },
+      });
+    } catch (err) {
+      console.warn('[app] failed to save preferences:', err);
+    }
+  }
 
   function syncMenuPets(entries: PetCatalogEntry[], currentPetId: string): void {
     const menuPets = entries.map((pet) => ({
       id: pet.id,
       label: pet.manifest.displayName,
+      removable: pet.removable,
     }));
     menu.setPets(menuPets, currentPetId);
     void nativeMenu.setPets(menuPets, currentPetId).catch((error: unknown) => {
       console.error('[app] failed to sync native app menu', error);
     });
-  }
-
-  function keepLoadedPetMetadata(entries: PetCatalogEntry[]): PetCatalogEntry[] {
-    return entries.map((pet) => (pet.id === activePet.id ? activePet : pet));
   }
 
   async function switchPet(entry: PetCatalogEntry, availablePets: PetCatalogEntry[] = pets): Promise<boolean> {
@@ -68,6 +109,8 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
     menu.setPetSize(canvas.width, canvas.height);
     syncMenuPets(pets, activePet.id);
     animator.play(behavior.currentState);
+
+    void savePrefs();
     return true;
   }
 
@@ -80,22 +123,14 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
       pets = discovered;
       const fallbackPet = discovered[0];
       if (fallbackPet) {
-        const switched = await switchPet(fallbackPet, discovered);
-        if (switched) {
-          return;
-        }
+        await switchPet(fallbackPet, discovered);
+        return;
       }
-
       syncMenuPets(pets, activePet.id);
       return;
     }
 
-    const switched = await switchPet(currentPet, discovered);
-    if (switched) {
-      return;
-    }
-
-    pets = keepLoadedPetMetadata(discovered);
+    pets = discovered;
     syncMenuPets(pets, activePet.id);
   }
 
@@ -103,9 +138,9 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
     behavior.handleAnimationEnd();
   });
 
-  const switched = await switchPet(initialPet);
+  const switched = await switchPet(preferredPet);
   if (!switched) {
-    console.error(`Failed to load initial pet ${initialPet.id}`);
+    console.error(`Failed to load initial pet ${preferredPet.id}`);
     return;
   }
 
@@ -121,16 +156,42 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
     }
   });
 
-  function handleMenuAction(action: MenuAction): void {
-    if (action.type === 'pet') {
-      const nextPet = pets.find((pet) => pet.id === action.petId);
-      if (nextPet) {
-        void switchPet(nextPet);
-      }
-      return;
+  async function handleMenuAction(action: MenuAction): Promise<void> {
+    switch (action.type) {
+      case 'state':
+        behavior.forceState(action.state);
+        break;
+      case 'pet':
+        {
+          const nextPet = pets.find((pet) => pet.id === action.petId);
+          if (nextPet) {
+            await switchPet(nextPet);
+          }
+        }
+        break;
+      case 'addPet':
+        {
+          const result = await invoke<AddPetResult>('add_pet');
+          if (result.success) {
+            await refreshPets();
+          } else if (result.error) {
+            console.warn('[app] add pet failed:', result.error);
+          }
+        }
+        break;
+      case 'removePet':
+        {
+          const result = await invoke<RemovePetResult>('remove_pet', {
+            petId: action.petId,
+          });
+          if (result.success) {
+            await refreshPets();
+          } else if (result.error) {
+            console.warn('[app] remove pet failed:', result.error);
+          }
+        }
+        break;
     }
-
-    behavior.forceState(action.state);
   }
 
   menu.on(handleMenuAction);
@@ -146,6 +207,13 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
       console.error('[app] failed to refresh pets', error);
     });
   }) as EventListener);
+
+  window.addEventListener('mouseup', () => {
+    if (behavior.isDragging) return;
+    setTimeout(() => {
+      void savePrefs();
+    }, 200);
+  });
 
   let lastTime = performance.now();
 
