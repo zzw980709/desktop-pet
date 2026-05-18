@@ -1,14 +1,23 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Renderer } from '../src/engine/renderer';
-import type { CharacterManifest } from '../src/types';
+import type { LoadedPet, PetManifest } from '../src/types';
+import { ATLAS_COLUMNS, ATLAS_ROWS, CELL_HEIGHT, CELL_WIDTH } from '../src/pets/contract';
 
-function makeManifest(overrides: Partial<CharacterManifest> = {}): CharacterManifest {
+function makePet(): LoadedPet {
+  const manifest: PetManifest = {
+    id: 'codex-cat',
+    displayName: 'Codex Cat',
+    description: 'Mascot cat',
+    spritesheetPath: 'spritesheet.webp',
+  };
+
+  const spritesheet = document.createElement('canvas');
+  spritesheet.width = CELL_WIDTH * ATLAS_COLUMNS;
+  spritesheet.height = CELL_HEIGHT * ATLAS_ROWS;
+
   return {
-    name: 'test', displayName: 'Test', version: '1.0.0', author: '',
-    frameWidth: 32, frameHeight: 32,
-    animations: { idle: { start: 0, end: 3, fps: 4, loop: true } },
-    defaultState: 'idle', scale: 2, reminders: [],
-    ...overrides,
+    manifest,
+    spritesheet: spritesheet as unknown as HTMLImageElement,
   };
 }
 
@@ -23,20 +32,40 @@ describe('Renderer', () => {
   });
 
   it('initializes with given scale', () => {
-    renderer = new Renderer(canvas, makeManifest({ scale: 3 }));
+    renderer = new Renderer(canvas, 3);
     expect(renderer.scale).toBe(3);
+    expect(renderer.frameWidth).toBe(CELL_WIDTH);
+    expect(renderer.frameHeight).toBe(CELL_HEIGHT);
   });
 
-  it('drawFrame does not throw with valid frame index', () => {
-    renderer = new Renderer(canvas, makeManifest());
-    expect(() => renderer.drawFrame(0)).not.toThrow();
+  it('drawFrame does not throw with a valid atlas cell', () => {
+    renderer = new Renderer(canvas, 2);
+    renderer.setCharacter(makePet());
+
+    expect(() => renderer.drawFrame({ row: 2, column: 3 })).not.toThrow();
   });
 
-  it('drawFrame clears canvas before drawing', () => {
-    renderer = new Renderer(canvas, makeManifest());
+  it('drawFrame clears the canvas and draws the requested atlas slice', () => {
+    renderer = new Renderer(canvas, 2);
+    renderer.setCharacter(makePet());
+
     const ctx = canvas.getContext('2d')!;
-    const spy = vi.spyOn(ctx, 'clearRect');
-    renderer.drawFrame(0);
-    expect(spy).toHaveBeenCalled();
+    const clearSpy = vi.spyOn(ctx, 'clearRect');
+    const offscreenDrawSpy = vi.spyOn((renderer as any).offCtx, 'drawImage');
+
+    renderer.drawFrame({ row: 2, column: 3 });
+
+    expect(clearSpy).toHaveBeenCalledWith(0, 0, canvas.width, canvas.height);
+    expect(offscreenDrawSpy).toHaveBeenCalledWith(
+      expect.any(HTMLCanvasElement),
+      CELL_WIDTH * 3,
+      CELL_HEIGHT * 2,
+      CELL_WIDTH,
+      CELL_HEIGHT,
+      0,
+      0,
+      CELL_WIDTH,
+      CELL_HEIGHT,
+    );
   });
 });

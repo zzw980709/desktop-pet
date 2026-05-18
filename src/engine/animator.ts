@@ -1,25 +1,48 @@
-import type { CharacterManifest } from '../types';
+import type { PetState } from '../types';
 
 type EventHandler = () => void;
 
+type AnimationSpec = {
+  row: number;
+  usedColumns: number[];
+  durationsMs: number[];
+  loop: boolean;
+};
+
+const PET_ANIMATIONS: Record<PetState, AnimationSpec> = {
+  idle: { row: 0, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [280, 110, 110, 140, 140, 320], loop: true },
+  'running-right': { row: 1, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [120, 120, 120, 120, 120, 120, 120, 220], loop: true },
+  'running-left': { row: 2, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [120, 120, 120, 120, 120, 120, 120, 220], loop: true },
+  waving: { row: 3, usedColumns: [0, 1, 2, 3], durationsMs: [140, 140, 140, 280], loop: false },
+  jumping: { row: 4, usedColumns: [0, 1, 2, 3, 4], durationsMs: [140, 140, 140, 140, 280], loop: false },
+  failed: { row: 5, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [140, 140, 140, 140, 140, 140, 140, 240], loop: false },
+  waiting: { row: 6, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [150, 150, 150, 150, 150, 260], loop: true },
+  running: { row: 7, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [120, 120, 120, 120, 120, 220], loop: true },
+  review: { row: 8, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [150, 150, 150, 150, 150, 280], loop: true },
+};
+
 export class Animator {
-  currentAnimation: string;
-  currentFrame: number;
-  private elapsed: number = 0;
-  private frameDuration: number = 0;
+  currentState: PetState = 'idle';
+  currentFrameIndex = 0;
+  currentCell = { row: 0, column: 0 };
+  currentAnimation = this.currentState;
+  currentFrame = 0;
+
+  private elapsed = 0;
   private handlers: EventHandler[] = [];
   private finished = false;
+  private paused = false;
 
-  constructor(private manifest: CharacterManifest) {
-    const initial = manifest.defaultState;
-    this.currentAnimation = initial;
-    const anim = manifest.animations[initial];
-    this.currentFrame = anim?.start ?? 0;
-    this.frameDuration = anim ? 1000 / anim.fps : 250;
+  constructor(_manifest?: unknown) {
+    this.syncCell();
   }
 
   on(handler: EventHandler): void {
     this.handlers.push(handler);
+  }
+
+  get isPaused(): boolean {
+    return this.paused;
   }
 
   off(handler: EventHandler): void {
@@ -27,46 +50,65 @@ export class Animator {
     if (idx !== -1) this.handlers.splice(idx, 1);
   }
 
-  private emit(): void {
-    for (const fn of this.handlers) {
-      try { fn(); } catch { /* isolate handler errors */ }
-    }
-  }
-
-  play(name: string): void {
-    if (name === this.currentAnimation) return;
-    const anim = this.manifest.animations[name];
-    if (!anim) return;
-    this.currentAnimation = name;
-    this.currentFrame = anim.start;
+  play(state: PetState): void {
+    if (state === this.currentState) return;
+    this.currentState = state;
+    this.currentAnimation = state;
+    this.currentFrameIndex = 0;
     this.elapsed = 0;
     this.finished = false;
-    this.frameDuration = 1000 / anim.fps;
+    this.paused = false;
+    this.syncCell();
+  }
+
+  pause(): void {
+    this.paused = true;
+  }
+
+  resume(): void {
+    this.paused = false;
   }
 
   tick(deltaMs: number): void {
-    const anim = this.manifest.animations[this.currentAnimation];
-    if (!anim) return;
+    const spec = PET_ANIMATIONS[this.currentState];
+    if (!spec || this.finished || this.paused) return;
 
     this.elapsed += deltaMs;
-    const framesToAdvance = Math.floor(this.elapsed / this.frameDuration);
-    if (framesToAdvance === 0) return;
 
-    this.elapsed -= framesToAdvance * this.frameDuration;
-    const newFrame = this.currentFrame + framesToAdvance;
+    while (this.elapsed >= spec.durationsMs[this.currentFrameIndex]) {
+      this.elapsed -= spec.durationsMs[this.currentFrameIndex];
+      const lastFrame = this.currentFrameIndex === spec.usedColumns.length - 1;
 
-    if (anim.loop) {
-      const range = anim.end - anim.start + 1;
-      this.currentFrame = anim.start + ((newFrame - anim.start) % range + range) % range;
-    } else {
-      if (newFrame > anim.end) {
-        this.currentFrame = anim.end;
-        if (!this.finished) {
+      if (lastFrame) {
+        if (!spec.loop) {
           this.finished = true;
+          this.syncCell();
           this.emit();
+          return;
         }
+
+        this.currentFrameIndex = 0;
       } else {
-        this.currentFrame = newFrame;
+        this.currentFrameIndex += 1;
+      }
+
+      this.syncCell();
+    }
+  }
+
+  private syncCell(): void {
+    const spec = PET_ANIMATIONS[this.currentState];
+    const column = spec.usedColumns[this.currentFrameIndex] ?? spec.usedColumns[0] ?? 0;
+    this.currentCell = { row: spec.row, column };
+    this.currentFrame = spec.row * 8 + column;
+  }
+
+  private emit(): void {
+    for (const fn of this.handlers) {
+      try {
+        fn();
+      } catch {
+        // Isolate listener failures from animator progress.
       }
     }
   }

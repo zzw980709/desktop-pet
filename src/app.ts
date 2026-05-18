@@ -1,96 +1,143 @@
-import { validateManifest, loadCharacter } from './engine/loader';
+import { loadPet } from './engine/loader';
 import { Renderer } from './engine/renderer';
 import { Animator } from './engine/animator';
 import { BehaviorEngine } from './engine/behavior';
-import { ReminderSystem } from './engine/bubble';
 import { Interactions } from './interactions';
 import { ContextMenu } from './ui/contextmenu';
-import { getCatSpritesheetURL } from './characters/cat/generator';
-import catManifestRaw from './characters/cat/manifest.json';
+import { CELL_HEIGHT, CELL_WIDTH } from './pets/contract';
+import { discoverPets } from './pets/catalog';
+import type { PetCatalogEntry } from './types';
+
+function getRenderScale(canvas: HTMLCanvasElement): number {
+  const widthScale = (canvas.clientWidth || 64) / CELL_WIDTH;
+  const heightScale = (canvas.clientHeight || 64) / CELL_HEIGHT;
+  return Math.min(widthScale, heightScale) || 1;
+}
 
 export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
-  const manifest = validateManifest(catManifestRaw);
-  if (!manifest) {
-    console.error('Failed to load cat manifest');
+  let pets = await discoverPets();
+  const initialPet = pets[0];
+  if (!initialPet) {
+    console.error('No pets available');
     return;
   }
 
-  const spritesheetURL = getCatSpritesheetURL();
-  const character = await loadCharacter(manifest, spritesheetURL);
-  if (!character) {
-    console.error('Failed to load cat character');
-    return;
-  }
-
-  const renderer = new Renderer(canvas, manifest);
-  renderer.setCharacter(character);
-
-  const animator = new Animator(manifest);
   const behavior = new BehaviorEngine();
-  const reminders = new ReminderSystem(manifest);
+  const animator = new Animator();
   const menu = new ContextMenu();
+  const renderScale = getRenderScale(canvas);
+  let renderer = new Renderer(canvas, renderScale);
+  let activePet = initialPet;
+  let petLoadVersion = 0;
 
-  // Register random transitions from idle
-  behavior.addTransition('idle', 'walk', () => true);
-  behavior.addTransition('idle', 'sleep', () => Math.random() < 0.25);
-  behavior.addTransition('idle', 'sit', () => Math.random() < 0.15);
+  function syncMenuPets(entries: PetCatalogEntry[], currentPetId: string): void {
+    menu.setPets(
+      entries.map((pet) => ({
+        id: pet.id,
+        label: pet.manifest.displayName,
+      })),
+      currentPetId,
+    );
+  }
 
-  // Heart effect state
-  let heartAlpha = 0;
-  const HEART_DURATION = 600;
-  let heartTimer = 0;
+  function keepLoadedPetMetadata(entries: PetCatalogEntry[]): PetCatalogEntry[] {
+    return entries.map((pet) => (pet.id === activePet.id ? activePet : pet));
+  }
 
-  // Wire animator -> behavior
+  async function switchPet(entry: PetCatalogEntry, availablePets: PetCatalogEntry[] = pets): Promise<boolean> {
+    const loadVersion = ++petLoadVersion;
+    const loadedPet = await loadPet(entry.manifest, entry.spritesheetUrl);
+    if (!loadedPet) {
+      console.warn(`[app] failed to load pet ${entry.id}`);
+      return false;
+    }
+    if (loadVersion !== petLoadVersion) {
+      return false;
+    }
+
+    activePet = entry;
+    pets = availablePets;
+    renderer = new Renderer(canvas, renderScale);
+    renderer.setCharacter(loadedPet);
+    menu.setPetSize(canvas.width, canvas.height);
+    syncMenuPets(pets, activePet.id);
+    animator.play(behavior.currentState);
+    return true;
+  }
+
+  async function refreshPets(): Promise<void> {
+    const discovered = await discoverPets();
+    if (discovered.length === 0) return;
+
+    const currentPet = discovered.find((pet) => pet.id === activePet.id);
+    if (!currentPet) {
+      pets = discovered;
+      const fallbackPet = discovered[0];
+      if (fallbackPet) {
+        const switched = await switchPet(fallbackPet, discovered);
+        if (switched) {
+          return;
+        }
+      }
+
+      syncMenuPets(pets, activePet.id);
+      return;
+    }
+
+    const switched = await switchPet(currentPet, discovered);
+    if (switched) {
+      return;
+    }
+
+    pets = keepLoadedPetMetadata(discovered);
+    syncMenuPets(pets, activePet.id);
+  }
+
   animator.on(() => {
     behavior.handleAnimationEnd();
   });
 
-  // Wire behavior -> animator
-  behavior.on((newState) => {
-    animator.play(newState);
-    if (newState === 'react') {
+  const switched = await switchPet(initialPet);
+  if (!switched) {
+    console.error(`Failed to load initial pet ${initialPet.id}`);
+    return;
+  }
+
+  let heartAlpha = 0;
+  const HEART_DURATION = 600;
+  let heartTimer = 0;
+
+  behavior.on((nextState) => {
+    animator.play(nextState);
+    if (nextState === 'waving') {
       heartAlpha = 1;
       heartTimer = HEART_DURATION;
     }
   });
 
-  // Wire reminders -> behavior + animator
-  reminders.on((_message, animation) => {
-    animator.play(animation);
-    behavior.transitionTo('react');
-  });
-
-  // Context menu actions
   menu.on((action) => {
-    switch (action) {
-      case 'pet':
-        behavior.forceState('react');
-        break;
-      case 'sleep':
-        behavior.forceState('sleep');
-        break;
-      case 'sit':
-        behavior.forceState('sit');
-        break;
-      case 'walk':
-        behavior.forceState('walk');
-        break;
-      case 'feed':
-        behavior.forceState('react');
-        reminders.showBubble('好吃！');
-        break;
+    if (action.type === 'pet') {
+      const nextPet = pets.find((pet) => pet.id === action.petId);
+      if (nextPet) {
+        void switchPet(nextPet);
+      }
+      return;
     }
+
+    behavior.forceState(action.state);
   });
 
-  // Setup interactions
   new Interactions(canvas, behavior);
 
-  // Right-click opens menu
   window.addEventListener('pet:contextmenu', (() => {
-    void menu.show();
+    void menu.show().catch((error: unknown) => {
+      console.error('[app] failed to show context menu', error);
+    });
+    void refreshPets().catch((error: unknown) => {
+      console.error('[app] failed to refresh pets', error);
+    });
   }) as EventListener);
 
-  // Main loop
   let lastTime = performance.now();
 
   function loop(currentTime: number): void {
@@ -98,13 +145,19 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
     lastTime = currentTime;
 
     behavior.tick(deltaMs);
-    reminders.tick(deltaMs);
-    animator.tick(deltaMs);
 
-    renderer.drawFrame(animator.currentFrame);
+    if (behavior.isDragging) {
+      if (!animator.isPaused) {
+        animator.pause();
+      }
+    } else {
+      if (animator.isPaused) {
+        animator.resume();
+      }
+      animator.tick(deltaMs);
+    }
 
-    const bubble = reminders.getBubbleToDraw();
-    if (bubble) renderer.drawBubble(bubble.text);
+    renderer.drawFrame(animator.currentCell);
 
     if (heartAlpha > 0) {
       heartTimer -= deltaMs;
@@ -117,4 +170,3 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
 
   requestAnimationFrame(loop);
 }
-

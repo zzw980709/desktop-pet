@@ -1,21 +1,17 @@
-export type State = 'idle' | 'walk' | 'sleep' | 'sit' | 'drag' | 'react';
+import type { PetState } from '../types';
+
+export type State = PetState;
 
 type StateChangeHandler = (newState: State, oldState: State) => void;
-type TransitionCondition = () => boolean;
 
-interface Transition {
-  from: State;
-  to: State;
-  condition: TransitionCondition;
-}
-
-const NON_IDLE: State[] = ['walk', 'sleep', 'sit', 'react'];
+const RESET_TO_IDLE_ON_END: State[] = ['waving', 'jumping', 'failed'];
+const RANDOM_IDLE_TRANSITIONS: State[] = ['running-right', 'running-left', 'jumping', 'running', 'review'];
 
 export class BehaviorEngine {
   private _currentState: State = 'idle';
-  private transitions: Transition[] = [];
   private listeners: StateChangeHandler[] = [];
   private idleTimer = 0;
+  private dragging = false;
   private rng: () => number;
 
   constructor(rng?: () => number) {
@@ -27,6 +23,10 @@ export class BehaviorEngine {
     return this._currentState;
   }
 
+  get isDragging(): boolean {
+    return this.dragging;
+  }
+
   on(handler: StateChangeHandler): void {
     this.listeners.push(handler);
   }
@@ -36,33 +36,37 @@ export class BehaviorEngine {
     if (idx !== -1) this.listeners.splice(idx, 1);
   }
 
-  addTransition(from: State, to: State, condition: TransitionCondition): void {
-    this.transitions.push({ from, to, condition });
+  addTransition(): void {
+    // Transitions are runtime-owned in the fixed atlas contract.
   }
 
   transitionTo(newState: State): void {
     if (newState === this._currentState) return;
     const oldState = this._currentState;
     this._currentState = newState;
-    if (newState === 'idle') this.resetIdleTimer();
+    if (newState === 'idle') {
+      this.dragging = false;
+      this.resetIdleTimer();
+    }
     for (const fn of this.listeners) {
       fn(newState, oldState);
     }
   }
 
   tick(deltaMs: number): void {
-    if (this._currentState === 'idle') {
-      this.idleTimer -= deltaMs;
-      if (this.idleTimer <= 0) {
-        this.tryRandomTransition();
-        this.resetIdleTimer();
-      }
-    }
+    if (this.dragging) return;
+    if (this._currentState !== 'idle') return;
+
+    this.idleTimer -= deltaMs;
+    if (this.idleTimer > 0) return;
+
+    this.tryRandomTransition();
+    this.resetIdleTimer();
   }
 
   handleClick(): void {
-    if (this._currentState !== 'drag') {
-      this.transitionTo('react');
+    if (!this.dragging) {
+      this.transitionTo('waving');
     }
   }
 
@@ -71,15 +75,17 @@ export class BehaviorEngine {
   }
 
   handleDragStart(): void {
-    this.transitionTo('drag');
+    this.dragging = true;
   }
 
   handleDragEnd(): void {
+    this.dragging = false;
     this.transitionTo('idle');
   }
 
   handleAnimationEnd(): void {
-    if (NON_IDLE.includes(this._currentState)) {
+    if (this.dragging) return;
+    if (RESET_TO_IDLE_ON_END.includes(this._currentState)) {
       this.transitionTo('idle');
     }
   }
@@ -89,9 +95,7 @@ export class BehaviorEngine {
   }
 
   private tryRandomTransition(): void {
-    const available = this.transitions.filter((t) => t.from === 'idle' && t.condition());
-    if (available.length === 0) return;
-    const chosen = available[Math.floor(this.rng() * available.length)];
-    this.transitionTo(chosen.to);
+    const nextState = RANDOM_IDLE_TRANSITIONS[Math.floor(this.rng() * RANDOM_IDLE_TRANSITIONS.length)] ?? 'running-right';
+    this.transitionTo(nextState);
   }
 }

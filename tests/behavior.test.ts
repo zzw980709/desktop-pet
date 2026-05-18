@@ -15,9 +15,8 @@ describe('BehaviorEngine', () => {
   it('emits stateChange on transition', () => {
     const handler = vi.fn();
     engine.on(handler);
-    engine.addTransition('idle', 'walk', () => true);
-    engine.transitionTo('walk');
-    expect(handler).toHaveBeenCalledWith('walk', 'idle');
+    engine.transitionTo('running-right');
+    expect(handler).toHaveBeenCalledWith('running-right', 'idle');
   });
 
   it('does not emit when transitioning to same state', () => {
@@ -27,31 +26,39 @@ describe('BehaviorEngine', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it('click triggers react from idle', () => {
+  it('click triggers waving from idle', () => {
     engine.handleClick();
-    expect(engine.currentState).toBe('react');
+    expect(engine.currentState).toBe('waving');
   });
 
-  it('click triggers react from walk', () => {
-    engine.transitionTo('walk');
+  it('click triggers waving from running-right', () => {
+    engine.transitionTo('running-right');
     engine.handleClick();
-    expect(engine.currentState).toBe('react');
+    expect(engine.currentState).toBe('waving');
   });
 
-  it('drag interrupts any state', () => {
-    engine.transitionTo('sleep');
+  it('click does nothing while dragging', () => {
     engine.handleDragStart();
-    expect(engine.currentState).toBe('drag');
+    engine.handleClick();
+    expect(engine.currentState).toBe('idle');
+  });
+
+  it('drag start preserves the current pet state', () => {
+    engine.transitionTo('review');
+    engine.handleDragStart();
+    expect(engine.currentState).toBe('review');
+    expect(engine.isDragging).toBe(true);
   });
 
   it('drag end goes to idle', () => {
     engine.handleDragStart();
     engine.handleDragEnd();
     expect(engine.currentState).toBe('idle');
+    expect(engine.isDragging).toBe(false);
   });
 
-  it('animation end transitions to idle from walk', () => {
-    engine.transitionTo('walk');
+  it('animation end transitions to idle from waving', () => {
+    engine.transitionTo('waving');
     engine.handleAnimationEnd();
     expect(engine.currentState).toBe('idle');
   });
@@ -61,23 +68,29 @@ describe('BehaviorEngine', () => {
     expect(engine.currentState).toBe('idle');
   });
 
-  it('tick triggers random transition from idle after timeout', () => {
-    engine.addTransition('idle', 'walk', () => true);
+  it('tick triggers a fixed random transition from idle after timeout', () => {
     engine.tick(6000);
-    expect(engine.currentState).toBe('walk');
+    expect(engine.currentState).toBe('jumping');
+  });
+
+  it('tick does not trigger random idle transitions while dragging from idle', () => {
+    engine.handleDragStart();
+    engine.tick(6000);
+    expect(engine.currentState).toBe('idle');
+    expect(engine.isDragging).toBe(true);
   });
 
   it('tick in non-idle state does nothing', () => {
-    engine.transitionTo('walk');
+    engine.transitionTo('running-right');
     engine.tick(10000);
-    expect(engine.currentState).toBe('walk');
+    expect(engine.currentState).toBe('running-right');
   });
 
   it('off removes listener', () => {
     const handler = vi.fn();
     engine.on(handler);
     engine.off(handler);
-    engine.transitionTo('walk');
+    engine.transitionTo('running-right');
     expect(handler).not.toHaveBeenCalled();
   });
 
@@ -86,32 +99,50 @@ describe('BehaviorEngine', () => {
     const h2 = vi.fn();
     engine.on(h1);
     engine.on(h2);
-    engine.transitionTo('walk');
+    engine.transitionTo('running-right');
     expect(h1).toHaveBeenCalled();
     expect(h2).toHaveBeenCalled();
   });
 
   it('rng injection controls idle timer duration', () => {
     const fastEngine = new BehaviorEngine(() => 0);
-    fastEngine.addTransition('idle', 'walk', () => true);
     fastEngine.tick(3001);
-    expect(fastEngine.currentState).toBe('walk');
+    expect(fastEngine.currentState).toBe('running-right');
   });
 
   it('rng controls which transition is chosen', () => {
-    engine.addTransition('idle', 'walk', () => true);
-    engine.addTransition('idle', 'sleep', () => true);
     engine.tick(6000);
-    // rng=0.5 → Math.floor(0.5 * 2) = 1 → picks 'sleep'
-    expect(engine.currentState).toBe('sleep');
+    // rng=0.5 -> Math.floor(0.5 * 5) = 2 -> picks 'jumping'
+    expect(engine.currentState).toBe('jumping');
   });
 
-  it('all non-idle states transition to idle on animationEnd', () => {
-    for (const state of ['walk', 'sleep', 'sit', 'react'] as const) {
+  it('non-looping states transition to idle on animationEnd', () => {
+    for (const state of ['waving', 'jumping', 'failed'] as const) {
       const e = new BehaviorEngine(() => 0.5);
       e.transitionTo(state);
       e.handleAnimationEnd();
       expect(e.currentState).toBe('idle');
     }
+  });
+
+  it('looping states remain active on animationEnd', () => {
+    engine.transitionTo('review');
+    engine.handleAnimationEnd();
+    expect(engine.currentState).toBe('review');
+  });
+
+  it('dragging does not force a pet state change on animationEnd', () => {
+    engine.transitionTo('review');
+    engine.handleDragStart();
+    engine.handleAnimationEnd();
+    expect(engine.currentState).toBe('review');
+  });
+
+  it('dragging preserves a non-looping state when animationEnd fires', () => {
+    engine.transitionTo('waving');
+    engine.handleDragStart();
+    engine.handleAnimationEnd();
+    expect(engine.currentState).toBe('waving');
+    expect(engine.isDragging).toBe(true);
   });
 });

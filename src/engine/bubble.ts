@@ -1,4 +1,12 @@
-import type { CharacterManifest } from '../types';
+interface ReminderLike {
+  interval: number;
+  message: string;
+  animation: string;
+}
+
+interface ReminderManifestLike {
+  reminders?: ReminderLike[];
+}
 
 export interface Bubble {
   text: string;
@@ -13,9 +21,11 @@ export class ReminderSystem {
   private listeners: ReminderHandler[] = [];
   private bubbleDuration = 5000;
   private bubbleTimer = 0;
+  private reminders: ReminderLike[];
 
-  constructor(private manifest: CharacterManifest) {
-    this.timers = manifest.reminders.map((r) => r.interval * 1000);
+  constructor(manifest: ReminderManifestLike) {
+    this.reminders = manifest.reminders ?? [];
+    this.timers = this.reminders.map((reminder) => reminder.interval * 1000);
   }
 
   on(handler: ReminderHandler): void {
@@ -28,7 +38,10 @@ export class ReminderSystem {
     for (let i = 0; i < this.timers.length; i++) {
       this.timers[i] -= deltaMs;
       if (this.timers[i] <= 0) {
-        const reminder = this.manifest.reminders[i];
+        const reminder = this.reminders[i];
+        if (!reminder) {
+          continue;
+        }
         this.timers[i] = reminder.interval * 1000;
         this.activeBubble = { text: reminder.message, elapsed: 0 };
         this.bubbleTimer = 0;

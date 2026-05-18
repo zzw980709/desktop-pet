@@ -1,36 +1,32 @@
-export interface AnimationConfig {
-  start: number;
-  end: number;
-  fps: number;
-  loop: boolean;
-}
+export type PetState =
+  | 'idle'
+  | 'running-right'
+  | 'running-left'
+  | 'waving'
+  | 'jumping'
+  | 'failed'
+  | 'waiting'
+  | 'running'
+  | 'review';
 
-export interface ReminderConfig {
-  interval: number; // seconds
-  message: string;
-  animation: string;
-}
-
-export interface CharacterManifest {
-  name: string;
+export interface PetManifest {
+  id: string;
   displayName: string;
-  version: string;
-  author: string;
-  frameWidth: number;
-  frameHeight: number;
-  animations: Record<string, AnimationConfig>;
-  defaultState: string;
-  scale: number;
-  reminders: ReminderConfig[];
-  behaviorOverrides?: string;
+  description: string;
+  spritesheetPath: 'spritesheet.webp';
 }
 
-export interface LoadedCharacter {
-  manifest: CharacterManifest;
+export interface LoadedPet {
+  manifest: PetManifest;
   spritesheet: HTMLImageElement;
 }
 
-export type PetState = 'idle' | 'walk' | 'sleep' | 'sit' | 'drag' | 'react';
+export interface PetCatalogEntry {
+  id: string;
+  source: 'built-in' | 'user';
+  manifest: PetManifest;
+  spritesheetUrl: string;
+}
 
 export interface Position {
   x: number;

@@ -1,11 +1,10 @@
+use std::path::{Path, PathBuf};
 use tauri::Manager;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct CharacterInfo {
-    name: String,
-    display_name: String,
-    path: String,
+mod pets;
+
+fn resolve_pet_root(home_dir: &Path) -> PathBuf {
+    home_dir.join(".codex").join("pets")
 }
 
 #[tauri::command]
@@ -14,34 +13,33 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
-fn list_user_characters(app_handle: tauri::AppHandle) -> Vec<CharacterInfo> {
-    let data_dir = app_handle.path().app_data_dir().unwrap_or_default();
-    let chars_dir = data_dir.join("characters");
-    let mut characters = Vec::new();
+fn discover_pets(app_handle: tauri::AppHandle) -> Vec<pets::ExternalPetRecord> {
+    let Ok(home_dir) = app_handle.path().home_dir() else {
+        return Vec::new();
+    };
+    let pet_root = resolve_pet_root(&home_dir);
 
-    if let Ok(entries) = std::fs::read_dir(&chars_dir) {
-        for entry in entries.flatten() {
-            let manifest_path = entry.path().join("manifest.json");
-            if let Ok(content) = std::fs::read_to_string(&manifest_path) {
-                if let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&content) {
-                    characters.push(CharacterInfo {
-                        name: manifest["name"].as_str().unwrap_or("unknown").to_string(),
-                        display_name: manifest["displayName"].as_str().unwrap_or("Unknown").to_string(),
-                        path: entry.path().to_string_lossy().to_string(),
-                    });
-                }
-            }
-        }
-    }
-
-    characters
+    pets::discover_pets(&pet_root)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet, list_user_characters])
+        .invoke_handler(tauri::generate_handler![greet, discover_pets])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_pet_root;
+    use std::path::Path;
+
+    #[test]
+    fn discover_pets_root_resolves_codex_pets_directory() {
+        let pet_root = resolve_pet_root(Path::new("/tmp/codex-home"));
+
+        assert_eq!(pet_root, Path::new("/tmp/codex-home/.codex/pets"));
+    }
 }

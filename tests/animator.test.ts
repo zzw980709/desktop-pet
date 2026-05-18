@@ -1,89 +1,105 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Animator } from '../src/engine/animator';
-import type { CharacterManifest } from '../src/types';
-
-function makeManifest(): CharacterManifest {
-  return {
-    name: 'test', displayName: 'Test', version: '1.0.0', author: '',
-    frameWidth: 32, frameHeight: 32,
-    animations: {
-      idle: { start: 0, end: 3, fps: 4, loop: true },
-      react: { start: 4, end: 5, fps: 2, loop: false },
-    },
-    defaultState: 'idle', scale: 2, reminders: [],
-  };
-}
 
 describe('Animator', () => {
   let animator: Animator;
-  let manifest: CharacterManifest;
 
   beforeEach(() => {
-    manifest = makeManifest();
-    animator = new Animator(manifest);
+    animator = new Animator();
   });
 
-  it('starts with default state animation', () => {
-    expect(animator.currentAnimation).toBe('idle');
+  it('starts on the idle row and first column', () => {
+    expect(animator.currentState).toBe('idle');
+    expect(animator.currentCell).toEqual({ row: 0, column: 0 });
     expect(animator.currentFrame).toBe(0);
   });
 
-  it('play switches animation', () => {
-    animator.play('react');
-    expect(animator.currentAnimation).toBe('react');
-    expect(animator.currentFrame).toBe(4); // start frame of react
+  it('play switches to the requested atlas row and resets the frame index', () => {
+    animator.tick(300);
+    animator.play('waving');
+
+    expect(animator.currentState).toBe('waving');
+    expect(animator.currentCell).toEqual({ row: 3, column: 0 });
+    expect(animator.currentFrame).toBe(24);
   });
 
   it('play does nothing for same animation', () => {
-    animator.play('react');
-    const frame = animator.currentFrame;
-    animator.play('react');
-    expect(animator.currentFrame).toBe(frame);
-  });
+    animator.tick(280);
+    const cell = animator.currentCell;
 
-  it('tick advances frame based on delta time for looping animation', () => {
     animator.play('idle');
-    const before = animator.currentFrame;
-    animator.tick(300); // > 250ms should advance at least 1 frame
-    expect(animator.currentFrame).toBeGreaterThanOrEqual(before);
+
+    expect(animator.currentCell).toEqual(cell);
   });
 
-  it('tick wraps around for looping animation', () => {
-    animator.play('idle');
-    for (let i = 0; i < 20; i++) {
-      animator.tick(300);
-    }
-    expect(animator.currentFrame).toBeLessThanOrEqual(3); // end=3 for idle
+  it('uses per-frame durations for idle timing', () => {
+    animator.tick(279);
+    expect(animator.currentCell).toEqual({ row: 0, column: 0 });
+
+    animator.tick(1);
+    expect(animator.currentCell).toEqual({ row: 0, column: 1 });
   });
 
-  it('emits animationEnd event when non-looping animation finishes', () => {
+  it('loops through the used columns for looping states', () => {
+    animator.tick(779);
+    expect(animator.currentCell).toEqual({ row: 0, column: 4 });
+
+    animator.tick(1);
+
+    expect(animator.currentCell).toEqual({ row: 0, column: 5 });
+
+    animator.tick(320);
+
+    expect(animator.currentCell).toEqual({ row: 0, column: 0 });
+  });
+
+  it('emits animationEnd once when a non-looping animation finishes', () => {
     const handler = vi.fn();
     animator.on(handler);
-    animator.play('react');
-    animator.tick(600); // fps=2 so 500ms per frame
-    animator.tick(600); // enough to finish 2 frames
-    expect(handler).toHaveBeenCalled();
-  });
+    animator.play('waving');
 
-  it('does not re-emit animationEnd on subsequent ticks', () => {
-    const handler = vi.fn();
-    animator.on(handler);
-    animator.play('react');
-    animator.tick(600);
-    animator.tick(600); // finishes
+    animator.tick(140);
+    animator.tick(140);
+    animator.tick(140);
+    animator.tick(280);
+
+    expect(animator.currentCell).toEqual({ row: 3, column: 3 });
     expect(handler).toHaveBeenCalledTimes(1);
-    animator.tick(600); // extra tick after finish
-    animator.tick(600);
-    expect(handler).toHaveBeenCalledTimes(1); // still only once
+
+    animator.tick(1000);
+    expect(animator.currentCell).toEqual({ row: 3, column: 3 });
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('can be paused to freeze the current atlas cell', () => {
+    animator.tick(280);
+    expect(animator.currentCell).toEqual({ row: 0, column: 1 });
+
+    animator.pause();
+    animator.tick(1000);
+
+    expect(animator.isPaused).toBe(true);
+    expect(animator.currentCell).toEqual({ row: 0, column: 1 });
+  });
+
+  it('can resume after being paused', () => {
+    animator.tick(280);
+    animator.pause();
+    animator.tick(1000);
+
+    animator.resume();
+    animator.tick(110);
+
+    expect(animator.isPaused).toBe(false);
+    expect(animator.currentCell).toEqual({ row: 0, column: 2 });
   });
 
   it('off removes listener', () => {
     const handler = vi.fn();
     animator.on(handler);
     animator.off(handler);
-    animator.play('react');
-    animator.tick(600);
-    animator.tick(600);
+    animator.play('waving');
+    animator.tick(700);
     expect(handler).not.toHaveBeenCalled();
   });
 });
