@@ -11,6 +11,12 @@ node_modules
 dist
 dist-ssr
 *.local
+tmp/
+assets/
+.agents/
+skills-lock.json
+src-tauri/target/
+docs/superpowers/
 
 # Editor directories and files
 .vscode/*

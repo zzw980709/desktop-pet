@@ -32,6 +32,27 @@ describe('Animator', () => {
     expect(animator.currentCell).toEqual(cell);
   });
 
+  it('preserves loop progress when switching between directional running states', () => {
+    animator.play('running-right');
+    animator.tick(370);
+
+    animator.play('running-left');
+
+    expect(animator.currentCell).toEqual({ row: 2, column: 3 });
+
+    animator.tick(110);
+
+    expect(animator.currentCell).toEqual({ row: 2, column: 4 });
+  });
+
+  it('maps idle loop progress into running-right instead of resetting to the first frame', () => {
+    animator.tick(530);
+
+    animator.play('running-right');
+
+    expect(animator.currentCell).toEqual({ row: 1, column: 4 });
+  });
+
   it('uses per-frame durations for idle timing', () => {
     animator.tick(279);
     expect(animator.currentCell).toEqual({ row: 0, column: 0 });

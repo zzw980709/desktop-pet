@@ -1,10 +1,16 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { LogicalSize } from '@tauri-apps/api/dpi';
-import type { PetState } from '../types';
+import type { MenuAction, PetMenuItem } from './menu-model';
+import { STATE_ITEMS } from './menu-model';
 
-const MENU_MIN_W = 96;
+const MENU_MIN_W = 220;
 const MENU_GAP = 4;
-const MENU_HORIZONTAL_PADDING = 24;
+const MENU_HORIZONTAL_PADDING = 36;
+const MENU_HEADER_HEIGHT = 44;
+const MENU_SECTION_TITLE_HEIGHT = 20;
+const MENU_ITEM_HEIGHT = 32;
+const MENU_SECTION_GAP = 10;
+const MENU_BOTTOM_PADDING = 14;
 const MENU_ASCII_CHAR_W = 7;
 const MENU_SPACE_CHAR_W = 4;
 const MENU_WIDE_CHAR_W = 12;
@@ -12,30 +18,7 @@ const MENU_EMOJI_CHAR_W = 14;
 const MENU_FALLBACK_CHAR_W = 8;
 const WIDE_CHAR_RE = /[\u1100-\u115f\u2329\u232a\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6]/u;
 
-type StateAction = Extract<
-  PetState,
-  'waving' | 'review' | 'running' | 'waiting' | 'jumping' | 'running-right' | 'running-left' | 'idle'
->;
-
-export interface PetMenuItem {
-  id: string;
-  label: string;
-}
-
-export type MenuAction =
-  | { type: 'state'; state: StateAction }
-  | { type: 'pet'; petId: string };
-
-export const STATE_ITEMS = [
-  { label: 'Wave', action: 'waving' },
-  { label: 'Think', action: 'review' },
-  { label: 'Work', action: 'running' },
-  { label: 'Wait', action: 'waiting' },
-  { label: 'Jump', action: 'jumping' },
-  { label: 'Move Right', action: 'running-right' },
-  { label: 'Move Left', action: 'running-left' },
-  { label: 'Reset to Idle', action: 'idle' },
-] as const satisfies ReadonlyArray<{ label: string; action: StateAction }>;
+export { STATE_ITEMS } from './menu-model';
 
 export class ContextMenu {
   private el: HTMLElement;
@@ -64,12 +47,33 @@ export class ContextMenu {
   private build(): void {
     this.el.replaceChildren();
     this.el.style.width = `${this.getMenuWidth()}px`;
+    this.el.className = 'ctx-menu-panel';
+
+    const header = document.createElement('div');
+    header.className = 'ctx-header';
+
+    const eyebrow = document.createElement('div');
+    eyebrow.className = 'ctx-eyebrow';
+    eyebrow.textContent = 'Desktop Pet';
+
+    const title = document.createElement('div');
+    title.className = 'ctx-title';
+    title.textContent = this.currentPetId ? this.currentPetLabel() : 'Codex Cat';
+
+    header.append(eyebrow, title);
+    this.el.appendChild(header);
+
+    const actionSection = document.createElement('section');
+    actionSection.className = 'ctx-section';
+    actionSection.appendChild(this.createSectionTitle('Actions'));
 
     const actionGroup = document.createElement('div');
+    actionGroup.className = 'ctx-group';
     for (const item of STATE_ITEMS) {
       const btn = document.createElement('button');
       btn.className = 'ctx-item';
       btn.textContent = item.label;
+      btn.dataset.meta = this.actionMeta(item.action);
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const action: MenuAction = { type: 'state', state: item.action };
@@ -79,21 +83,24 @@ export class ContextMenu {
       });
       actionGroup.appendChild(btn);
     }
-    this.el.appendChild(actionGroup);
+    actionSection.appendChild(actionGroup);
+    this.el.appendChild(actionSection);
 
     if (this.pets.length > 0) {
-      const divider = document.createElement('div');
-      divider.className = 'ctx-divider';
-      this.el.appendChild(divider);
+      const petSection = document.createElement('section');
+      petSection.className = 'ctx-section';
+      petSection.appendChild(this.createSectionTitle('Switch Pet'));
 
       for (const pet of this.pets) {
         const btn = document.createElement('button');
         btn.className = 'ctx-item';
         if (pet.id === this.currentPetId) {
           btn.textContent = `Current Pet: ${pet.label}`;
+          btn.dataset.meta = 'Active';
           btn.disabled = true;
         } else {
           btn.textContent = `Switch to ${pet.label}`;
+          btn.dataset.meta = 'Load';
           btn.addEventListener('click', (e) => {
             e.stopPropagation();
             const action: MenuAction = { type: 'pet', petId: pet.id };
@@ -102,8 +109,9 @@ export class ContextMenu {
             });
           });
         }
-        this.el.appendChild(btn);
+        petSection.appendChild(btn);
       }
+      this.el.appendChild(petSection);
     }
   }
 
@@ -161,9 +169,16 @@ export class ContextMenu {
 
   private async syncOpenWindowSize(): Promise<void> {
     const menuWidth = this.getMenuWidth();
-    const totalItems = STATE_ITEMS.length + this.pets.length;
-    const dividerHeight = this.pets.length > 0 ? 6 : 0;
-    const menuH = totalItems * 28 + 8 + dividerHeight;
+    const petSectionHeight = this.pets.length > 0
+      ? MENU_SECTION_TITLE_HEIGHT + this.pets.length * MENU_ITEM_HEIGHT + MENU_SECTION_GAP
+      : 0;
+    const menuH =
+      MENU_HEADER_HEIGHT +
+      MENU_SECTION_TITLE_HEIGHT +
+      STATE_ITEMS.length * MENU_ITEM_HEIGHT +
+      MENU_SECTION_GAP +
+      petSectionHeight +
+      MENU_BOTTOM_PADDING;
     await getCurrentWindow().setSize(
       new LogicalSize(this.petWidth + MENU_GAP + menuWidth, Math.max(this.petHeight, menuH)),
     );
@@ -261,5 +276,39 @@ export class ContextMenu {
     }
 
     return MENU_FALLBACK_CHAR_W;
+  }
+
+  private currentPetLabel(): string {
+    return this.pets.find((pet) => pet.id === this.currentPetId)?.label ?? 'Codex Cat';
+  }
+
+  private createSectionTitle(text: string): HTMLDivElement {
+    const title = document.createElement('div');
+    title.className = 'ctx-section-title';
+    title.textContent = text;
+    return title;
+  }
+
+  private actionMeta(action: (typeof STATE_ITEMS)[number]['action']): string {
+    switch (action) {
+      case 'waving':
+        return 'Hello';
+      case 'review':
+        return 'Focus';
+      case 'running':
+        return 'Task';
+      case 'waiting':
+        return 'Input';
+      case 'jumping':
+        return 'Burst';
+      case 'running-right':
+        return 'Right';
+      case 'running-left':
+        return 'Left';
+      case 'idle':
+        return 'Reset';
+      default:
+        return '';
+    }
   }
 }

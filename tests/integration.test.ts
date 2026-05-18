@@ -251,6 +251,121 @@ describe('full pipeline', () => {
     expect(setPetSize).toHaveBeenCalledWith(193, 209);
   });
 
+  it('app keeps directional drag animations ticking while dragging', async () => {
+    const codexCat = makePetEntry('codex-cat', 'Codex Cat', 'codex.webp');
+    const loadPet = vi.fn(async (manifest: PetCatalogEntry['manifest'], spritesheetUrl: string) => ({
+      manifest,
+      spritesheet: { src: spritesheetUrl } as HTMLImageElement,
+    }));
+    const discoverPets = vi.fn().mockResolvedValue([codexCat]);
+    const animatorState = {
+      isPaused: false,
+      currentCell: { row: 1, column: 0 },
+    };
+    const animatorPlay = vi.fn();
+    const animatorPause = vi.fn(() => {
+      animatorState.isPaused = true;
+    });
+    const animatorResume = vi.fn(() => {
+      animatorState.isPaused = false;
+    });
+    const animatorTick = vi.fn();
+    const behaviorTick = vi.fn();
+    const rafCallbacks: FrameRequestCallback[] = [];
+
+    vi.doMock('../src/engine/loader', () => ({
+      loadPet,
+    }));
+    vi.doMock('../src/pets/catalog', () => ({
+      discoverPets,
+    }));
+    vi.doMock('../src/engine/renderer', () => ({
+      Renderer: class MockRenderer {
+        constructor(canvas: HTMLCanvasElement) {
+          canvas.width = 192;
+          canvas.height = 208;
+        }
+
+        setCharacter(): void {}
+
+        drawFrame(): void {}
+
+        drawHeart(): void {}
+      },
+    }));
+    vi.doMock('../src/ui/contextmenu', () => ({
+      ContextMenu: class MockContextMenu {
+        on(): void {}
+        setPetSize(): void {}
+        setPets(): void {}
+        async show(): Promise<void> {}
+      },
+    }));
+    vi.doMock('../src/interactions', () => ({
+      Interactions: class MockInteractions {},
+    }));
+    vi.doMock('../src/engine/behavior', () => ({
+      BehaviorEngine: class MockBehaviorEngine {
+        currentState: PetState = 'running-right';
+        isDragging = true;
+
+        on(): void {}
+        tick(deltaMs: number): void {
+          behaviorTick(deltaMs);
+        }
+        handleAnimationEnd(): void {}
+        forceState(): void {}
+      },
+    }));
+    vi.doMock('../src/engine/animator', () => ({
+      Animator: class MockAnimator {
+        currentCell = animatorState.currentCell;
+        currentState: PetState = 'running-right';
+        currentAnimation: PetState = 'running-right';
+        currentFrame = 8;
+
+        on(): void {}
+        get isPaused(): boolean {
+          return animatorState.isPaused;
+        }
+        play(state: PetState): void {
+          animatorPlay(state);
+        }
+        pause(): void {
+          animatorPause();
+        }
+        resume(): void {
+          animatorResume();
+        }
+        tick(deltaMs: number): void {
+          animatorTick(deltaMs);
+        }
+      },
+    }));
+
+    vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }));
+
+    const { initApp } = await import('../src/app');
+    const canvas = document.createElement('canvas');
+    Object.defineProperty(canvas, 'clientWidth', { configurable: true, value: 64 });
+    Object.defineProperty(canvas, 'clientHeight', { configurable: true, value: 64 });
+
+    await initApp(canvas);
+
+    expect(animatorPlay).toHaveBeenCalledWith('running-right');
+    expect(rafCallbacks.length).toBeGreaterThan(0);
+
+    rafCallbacks[0]?.(16);
+
+    expect(behaviorTick).toHaveBeenCalledWith(expect.any(Number));
+    expect(animatorTick).toHaveBeenCalledWith(expect.any(Number));
+    expect(animatorPause).not.toHaveBeenCalled();
+    expect(animatorResume).not.toHaveBeenCalled();
+  });
+
   it('app does not mark a fallback pet current when fallback loading fails', async () => {
     const codexCat = makePetEntry('codex-cat', 'Codex Cat', 'codex.webp');
     const orbitFox = makePetEntry('orbit-fox', 'Orbit Fox', 'orbit.webp');

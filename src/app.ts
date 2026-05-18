@@ -4,9 +4,13 @@ import { Animator } from './engine/animator';
 import { BehaviorEngine } from './engine/behavior';
 import { Interactions } from './interactions';
 import { ContextMenu } from './ui/contextmenu';
+import { NativeAppMenu } from './ui/appmenu';
+import type { MenuAction } from './ui/menu-model';
 import { CELL_HEIGHT, CELL_WIDTH } from './pets/contract';
 import { discoverPets } from './pets/catalog';
 import type { PetCatalogEntry } from './types';
+
+const DRAG_ANIMATED_STATES = new Set(['running-right', 'running-left']);
 
 function getRenderScale(canvas: HTMLCanvasElement): number {
   const widthScale = (canvas.clientWidth || 64) / CELL_WIDTH;
@@ -25,19 +29,21 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
   const behavior = new BehaviorEngine();
   const animator = new Animator();
   const menu = new ContextMenu();
+  const nativeMenu = new NativeAppMenu();
   const renderScale = getRenderScale(canvas);
   let renderer = new Renderer(canvas, renderScale);
   let activePet = initialPet;
   let petLoadVersion = 0;
 
   function syncMenuPets(entries: PetCatalogEntry[], currentPetId: string): void {
-    menu.setPets(
-      entries.map((pet) => ({
-        id: pet.id,
-        label: pet.manifest.displayName,
-      })),
-      currentPetId,
-    );
+    const menuPets = entries.map((pet) => ({
+      id: pet.id,
+      label: pet.manifest.displayName,
+    }));
+    menu.setPets(menuPets, currentPetId);
+    void nativeMenu.setPets(menuPets, currentPetId).catch((error: unknown) => {
+      console.error('[app] failed to sync native app menu', error);
+    });
   }
 
   function keepLoadedPetMetadata(entries: PetCatalogEntry[]): PetCatalogEntry[] {
@@ -115,7 +121,7 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
     }
   });
 
-  menu.on((action) => {
+  function handleMenuAction(action: MenuAction): void {
     if (action.type === 'pet') {
       const nextPet = pets.find((pet) => pet.id === action.petId);
       if (nextPet) {
@@ -125,7 +131,10 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
     }
 
     behavior.forceState(action.state);
-  });
+  }
+
+  menu.on(handleMenuAction);
+  nativeMenu.on(handleMenuAction);
 
   new Interactions(canvas, behavior);
 
@@ -146,7 +155,10 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
 
     behavior.tick(deltaMs);
 
-    if (behavior.isDragging) {
+    const shouldAnimateWhileDragging =
+      behavior.isDragging && DRAG_ANIMATED_STATES.has(behavior.currentState);
+
+    if (behavior.isDragging && !shouldAnimateWhileDragging) {
       if (!animator.isPaused) {
         animator.pause();
       }

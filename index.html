@@ -18,6 +18,9 @@
         width: 64px; height: 64px;
         image-rendering: crisp-edges;
         image-rendering: pixelated;
+        outline: none;
+        box-shadow: none;
+        -webkit-tap-highlight-color: transparent;
       }
       #ctx-menu {
         display: none;
@@ -25,28 +28,98 @@
         position: absolute;
         top: 4px;
         left: 68px;
-        width: 96px;
-        background: #1a1a2e;
-        border: 2px solid #4a9eff;
-        padding: 4px;
-        gap: 2px;
-        image-rendering: pixelated;
+        min-width: 220px;
         z-index: 10;
       }
+      .ctx-menu-panel {
+        padding: 10px 10px 14px;
+        gap: 10px;
+        border-radius: 18px;
+        border: 1px solid rgba(255,255,255,0.12);
+        background:
+          linear-gradient(180deg, rgba(22, 26, 37, 0.96), rgba(12, 14, 20, 0.96)),
+          rgba(12, 14, 20, 0.94);
+        box-shadow:
+          0 18px 40px rgba(0,0,0,0.34),
+          inset 0 1px 0 rgba(255,255,255,0.08);
+        backdrop-filter: blur(14px) saturate(140%);
+      }
+      .ctx-header {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 2px 4px 6px;
+      }
+      .ctx-eyebrow {
+        color: rgba(140, 157, 191, 0.88);
+        font: 600 10px/1.2 "SF Mono", "IBM Plex Mono", monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+      }
+      .ctx-title {
+        color: #f7f9ff;
+        font: 700 15px/1.2 "SF Pro Display", "Helvetica Neue", sans-serif;
+      }
+      .ctx-section {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .ctx-section-title {
+        padding: 2px 6px 6px;
+        color: rgba(157, 173, 204, 0.82);
+        font: 600 10px/1.2 "SF Mono", "IBM Plex Mono", monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+      .ctx-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
       .ctx-item {
-        background: transparent;
-        border: none;
-        color: #f0f0ee;
-        font-family: 'Courier New', monospace;
-        font-size: 11px;
+        display: flex;
+        align-items: center;
+        width: 100%;
+        min-height: 32px;
+        border: 1px solid transparent;
+        border-radius: 12px;
+        background: rgba(255,255,255,0.02);
+        color: #f3f7ff;
+        font-family: "SF Pro Text", "Helvetica Neue", sans-serif;
+        font-size: 12px;
         text-align: left;
-        padding: 4px 6px;
+        padding: 8px 10px;
         cursor: pointer;
         white-space: nowrap;
+        transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+      }
+      .ctx-item::after {
+        content: attr(data-meta);
+        margin-left: auto;
+        color: rgba(160, 184, 220, 0.86);
+        font: 600 10px/1.2 "SF Mono", "IBM Plex Mono", monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
       }
       .ctx-item:hover {
-        background: #4a9eff;
-        color: #1a1a2e;
+        background: linear-gradient(180deg, rgba(99, 168, 255, 0.22), rgba(74, 123, 255, 0.18));
+        border-color: rgba(115, 166, 255, 0.32);
+        transform: translateY(-1px);
+      }
+      .ctx-item:focus-visible {
+        outline: none;
+        border-color: rgba(143, 194, 255, 0.58);
+        box-shadow: 0 0 0 3px rgba(75, 124, 255, 0.24);
+      }
+      .ctx-item:disabled {
+        opacity: 0.62;
+        cursor: default;
+        background: rgba(255,255,255,0.04);
+      }
+      .ctx-item:disabled:hover {
+        transform: none;
+        border-color: transparent;
       }
     </style>
     <title>Desktop Pet</title>

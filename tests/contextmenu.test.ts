@@ -53,6 +53,11 @@ function measureTextLikeMenu(text: string): number {
   }, 0);
 }
 
+function expectedMenuWidth(...labels: string[]): number {
+  const widestLabel = Math.max(...labels.map(measureTextLikeMenu));
+  return Math.max(220, widestLabel + 36);
+}
+
 function mockCanvasTextMeasurement() {
   return vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((contextId: string) => {
     if (contextId !== '2d') {
@@ -183,17 +188,15 @@ describe('ContextMenu', () => {
     try {
       await menu.show();
 
-      const expectedMenuWidth = Math.max(
-        ...[
-          ...STATE_ITEMS.map((item) => item.label),
-          'Current Pet: Codex Cat',
-          'Switch to Codex Assistant Cat',
-        ].map(measureTextLikeMenu),
-      ) + 24;
+      const menuWidth = expectedMenuWidth(
+        ...STATE_ITEMS.map((item) => item.label),
+        'Current Pet: Codex Cat',
+        'Switch to Codex Assistant Cat',
+      );
 
       expect(setSize).toHaveBeenCalledTimes(1);
       expect(setSize.mock.calls[0]?.[0]).toMatchObject({
-        width: 64 + 4 + expectedMenuWidth,
+        width: 64 + 4 + menuWidth,
       });
     } finally {
       getContextSpy.mockRestore();
@@ -271,16 +274,14 @@ describe('ContextMenu', () => {
         expect(setSize).toHaveBeenCalledTimes(2);
       });
 
-      const expectedMenuWidth = Math.max(
-        ...[
-          ...STATE_ITEMS.map((item) => item.label),
-          'Current Pet: Codex Cat',
-          'Switch to Codex Assistant Supreme Cat',
-        ].map(measureTextLikeMenu),
-      ) + 24;
+      const menuWidth = expectedMenuWidth(
+        ...STATE_ITEMS.map((item) => item.label),
+        'Current Pet: Codex Cat',
+        'Switch to Codex Assistant Supreme Cat',
+      );
 
       expect(setSize.mock.calls.at(-1)?.[0]).toMatchObject({
-        width: 64 + 4 + expectedMenuWidth,
+        width: 64 + 4 + menuWidth,
       });
     } finally {
       getContextSpy.mockRestore();
@@ -303,17 +304,15 @@ describe('ContextMenu', () => {
     try {
       await menu.show();
 
-      const expectedMenuWidth = Math.max(
-        ...[
-          ...STATE_ITEMS.map((item) => item.label),
-          'Current Pet: Cat',
-          'Switch to 猫猫猫猫',
-        ].map(measureTextLikeMenu),
-      ) + 24;
+      const menuWidth = expectedMenuWidth(
+        ...STATE_ITEMS.map((item) => item.label),
+        'Current Pet: Cat',
+        'Switch to 猫猫猫猫',
+      );
 
       expect(setSize).toHaveBeenCalledTimes(1);
       expect(setSize.mock.calls[0]?.[0]).toMatchObject({
-        width: 64 + 4 + expectedMenuWidth,
+        width: 64 + 4 + menuWidth,
       });
     } finally {
       getContextSpy.mockRestore();

@@ -21,6 +21,11 @@ const PET_ANIMATIONS: Record<PetState, AnimationSpec> = {
   review: { row: 8, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [150, 150, 150, 150, 150, 280], loop: true },
 };
 
+type TransitionState = {
+  frameIndex: number;
+  elapsed: number;
+};
+
 export class Animator {
   currentState: PetState = 'idle';
   currentFrameIndex = 0;
@@ -52,10 +57,11 @@ export class Animator {
 
   play(state: PetState): void {
     if (state === this.currentState) return;
+    const transition = this.computeTransition(state);
     this.currentState = state;
     this.currentAnimation = state;
-    this.currentFrameIndex = 0;
-    this.elapsed = 0;
+    this.currentFrameIndex = transition.frameIndex;
+    this.elapsed = transition.elapsed;
     this.finished = false;
     this.paused = false;
     this.syncCell();
@@ -101,6 +107,30 @@ export class Animator {
     const column = spec.usedColumns[this.currentFrameIndex] ?? spec.usedColumns[0] ?? 0;
     this.currentCell = { row: spec.row, column };
     this.currentFrame = spec.row * 8 + column;
+  }
+
+  private computeTransition(nextState: PetState): TransitionState {
+    const currentSpec = PET_ANIMATIONS[this.currentState];
+    const nextSpec = PET_ANIMATIONS[nextState];
+
+    if (!currentSpec.loop || !nextSpec.loop) {
+      return { frameIndex: 0, elapsed: 0 };
+    }
+
+    const currentDuration = currentSpec.durationsMs[this.currentFrameIndex] ?? currentSpec.durationsMs[0] ?? 1;
+    const frameProgress = currentDuration > 0 ? this.elapsed / currentDuration : 0;
+    const normalizedProgress =
+      (this.currentFrameIndex + Math.min(Math.max(frameProgress, 0), 0.999)) /
+      currentSpec.usedColumns.length;
+    const rawTargetFrame = normalizedProgress * nextSpec.usedColumns.length;
+    const frameIndex = Math.min(nextSpec.usedColumns.length - 1, Math.floor(rawTargetFrame));
+    const targetFrameProgress = rawTargetFrame - frameIndex;
+    const nextDuration = nextSpec.durationsMs[frameIndex] ?? nextSpec.durationsMs[0] ?? 0;
+
+    return {
+      frameIndex,
+      elapsed: nextDuration * targetFrameProgress,
+    };
   }
 
   private emit(): void {

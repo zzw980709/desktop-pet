@@ -68,29 +68,4 @@ export class Renderer {
     }
     this.ctx.restore();
   }
-
-  drawBubble(bubbleText: string): void {
-    const fontSize = 8;
-    const padding = 4;
-    const charWidth = 5;
-    const textWidth = bubbleText.length * charWidth;
-
-    const fontCanvas = document.createElement('canvas');
-    fontCanvas.width = this.canvas.width;
-    fontCanvas.height = 24;
-
-    const fctx = fontCanvas.getContext('2d')!;
-    fctx.clearRect(0, 0, fontCanvas.width, fontCanvas.height);
-
-    const bx = Math.max(0, (this.canvas.width - textWidth - padding * 2) / 2);
-    fctx.fillStyle = 'rgba(0,0,0,0.7)';
-    fctx.fillRect(bx, 0, textWidth + padding * 2, fontSize + padding * 2);
-
-    fctx.fillStyle = '#ffffff';
-    fctx.font = 'bold 8px monospace';
-    fctx.textBaseline = 'top';
-    fctx.fillText(bubbleText, bx + padding, padding);
-
-    this.ctx.drawImage(fontCanvas, 0, 0);
-  }
 }

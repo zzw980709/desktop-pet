@@ -57,6 +57,33 @@ describe('BehaviorEngine', () => {
     expect(engine.isDragging).toBe(false);
   });
 
+  it('drag end from directional running keeps a short settle before returning to idle', () => {
+    engine.transitionTo('running-right');
+    engine.handleDragStart();
+    engine.handleDragEnd();
+
+    expect(engine.currentState).toBe('running-right');
+    expect(engine.isDragging).toBe(false);
+
+    engine.tick(100);
+    expect(engine.currentState).toBe('running-right');
+
+    engine.tick(100);
+    expect(engine.currentState).toBe('idle');
+  });
+
+  it('dragging right switches to the running-right state', () => {
+    engine.handleDragStart();
+    engine.handleDragMove(24, 1);
+    expect(engine.currentState).toBe('running-right');
+  });
+
+  it('dragging left switches to the running-left state', () => {
+    engine.handleDragStart();
+    engine.handleDragMove(-24, 1);
+    expect(engine.currentState).toBe('running-left');
+  });
+
   it('animation end transitions to idle from waving', () => {
     engine.transitionTo('waving');
     engine.handleAnimationEnd();

@@ -32,8 +32,10 @@ export class Interactions {
 
   private onMouseMove = async (e: MouseEvent): Promise<void> => {
     if (!this.isDragging) return;
-    const dx = Math.abs(e.screenX - this.startX);
-    const dy = Math.abs(e.screenY - this.startY);
+    const deltaX = e.screenX - this.startX;
+    const deltaY = e.screenY - this.startY;
+    const dx = Math.abs(deltaX);
+    const dy = Math.abs(deltaY);
 
     if (!this.dragMoved && (dx > this.dragThreshold || dy > this.dragThreshold)) {
       this.dragMoved = true;
@@ -41,6 +43,7 @@ export class Interactions {
     }
 
     if (this.dragMoved) {
+      this.behavior.handleDragMove(deltaX, deltaY);
       try {
         await getCurrentWindow().setPosition(
           new LogicalPosition(e.screenX - this.offsetX, e.screenY - this.offsetY),
