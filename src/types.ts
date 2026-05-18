@@ -26,9 +26,15 @@ export interface PetCatalogEntry {
   source: 'built-in' | 'user';
   manifest: PetManifest;
   spritesheetUrl: string;
+  removable: boolean;
 }
 
 export interface Position {
   x: number;
   y: number;
+}
+
+export interface Preferences {
+  activePetId: string;
+  windowPosition?: Position;
 }

@@ -16,7 +16,7 @@ const MENU_SPACE_CHAR_W = 4;
 const MENU_WIDE_CHAR_W = 12;
 const MENU_EMOJI_CHAR_W = 14;
 const MENU_FALLBACK_CHAR_W = 8;
-const WIDE_CHAR_RE = /[\u1100-\u115f\u2329\u232a\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6]/u;
+const WIDE_CHAR_RE = /[ᄀ-ᅟ〈〉⺀-꓏가-힣豈-﫿︐-︙︰-﹯＀-｠￠-￦]/u;
 
 export { STATE_ITEMS } from './menu-model';
 
@@ -54,18 +54,18 @@ export class ContextMenu {
 
     const eyebrow = document.createElement('div');
     eyebrow.className = 'ctx-eyebrow';
-    eyebrow.textContent = 'Desktop Pet';
+    eyebrow.textContent = '桌面宠物';
 
     const title = document.createElement('div');
     title.className = 'ctx-title';
-    title.textContent = this.currentPetId ? this.currentPetLabel() : 'Codex Cat';
+    title.textContent = this.currentPetId ? this.currentPetLabel() : '小猫';
 
     header.append(eyebrow, title);
     this.el.appendChild(header);
 
     const actionSection = document.createElement('section');
     actionSection.className = 'ctx-section';
-    actionSection.appendChild(this.createSectionTitle('Actions'));
+    actionSection.appendChild(this.createSectionTitle('动作'));
 
     const actionGroup = document.createElement('div');
     actionGroup.className = 'ctx-group';
@@ -73,7 +73,6 @@ export class ContextMenu {
       const btn = document.createElement('button');
       btn.className = 'ctx-item';
       btn.textContent = item.label;
-      btn.dataset.meta = this.actionMeta(item.action);
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const action: MenuAction = { type: 'state', state: item.action };
@@ -89,18 +88,16 @@ export class ContextMenu {
     if (this.pets.length > 0) {
       const petSection = document.createElement('section');
       petSection.className = 'ctx-section';
-      petSection.appendChild(this.createSectionTitle('Switch Pet'));
+      petSection.appendChild(this.createSectionTitle('切换宠物'));
 
       for (const pet of this.pets) {
         const btn = document.createElement('button');
         btn.className = 'ctx-item';
         if (pet.id === this.currentPetId) {
-          btn.textContent = `Current Pet: ${pet.label}`;
-          btn.dataset.meta = 'Active';
+          btn.textContent = `当前：${pet.label}`;
           btn.disabled = true;
         } else {
-          btn.textContent = `Switch to ${pet.label}`;
-          btn.dataset.meta = 'Load';
+          btn.textContent = pet.label;
           btn.addEventListener('click', (e) => {
             e.stopPropagation();
             const action: MenuAction = { type: 'pet', petId: pet.id };
@@ -113,6 +110,38 @@ export class ContextMenu {
       }
       this.el.appendChild(petSection);
     }
+
+    const manageSection = document.createElement('section');
+    manageSection.className = 'ctx-section';
+
+    const addBtn = document.createElement('button');
+    addBtn.className = 'ctx-item';
+    addBtn.textContent = '添加宠物...';
+    addBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const action: MenuAction = { type: 'addPet' };
+      void this.hide().catch(() => {}).then(() => {
+        for (const h of this.handlers) h(action);
+      });
+    });
+    manageSection.appendChild(addBtn);
+
+    const currentPet = this.pets.find((p) => p.id === this.currentPetId);
+    if (currentPet && currentPet.removable) {
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'ctx-item ctx-item-danger';
+      removeBtn.textContent = `移除 "${currentPet.label}"`;
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const action: MenuAction = { type: 'removePet', petId: currentPet.id };
+        void this.hide().catch(() => {}).then(() => {
+          for (const h of this.handlers) h(action);
+        });
+      });
+      manageSection.appendChild(removeBtn);
+    }
+
+    this.el.appendChild(manageSection);
   }
 
   on(handler: (action: MenuAction) => void): void {
@@ -153,12 +182,15 @@ export class ContextMenu {
   private getMenuWidth(): number {
     const labels = [
       ...STATE_ITEMS.map((item) => item.label),
-      ...this.pets.map((pet) => (
-        pet.id === this.currentPetId
-          ? `Current Pet: ${pet.label}`
-          : `Switch to ${pet.label}`
-      )),
+      ...this.pets.map((pet) =>
+        pet.id === this.currentPetId ? `当前：${pet.label}` : pet.label
+      ),
+      '添加宠物...',
     ];
+    const currentPet = this.pets.find((p) => p.id === this.currentPetId);
+    if (currentPet && currentPet.removable) {
+      labels.push(`移除 "${currentPet.label}"`);
+    }
     const widestLabel = Math.max(...labels.map((label) => this.measureTextWidth(label)), 0);
     return Math.max(MENU_MIN_W, widestLabel + MENU_HORIZONTAL_PADDING);
   }
@@ -172,12 +204,16 @@ export class ContextMenu {
     const petSectionHeight = this.pets.length > 0
       ? MENU_SECTION_TITLE_HEIGHT + this.pets.length * MENU_ITEM_HEIGHT + MENU_SECTION_GAP
       : 0;
+    const manageSectionHeight = MENU_ITEM_HEIGHT +
+      (this.pets.find((p) => p.id === this.currentPetId)?.removable ? MENU_ITEM_HEIGHT : 0);
     const menuH =
       MENU_HEADER_HEIGHT +
       MENU_SECTION_TITLE_HEIGHT +
       STATE_ITEMS.length * MENU_ITEM_HEIGHT +
       MENU_SECTION_GAP +
       petSectionHeight +
+      MENU_SECTION_GAP +
+      manageSectionHeight +
       MENU_BOTTOM_PADDING;
     await getCurrentWindow().setSize(
       new LogicalSize(this.petWidth + MENU_GAP + menuWidth, Math.max(this.petHeight, menuH)),
@@ -279,7 +315,7 @@ export class ContextMenu {
   }
 
   private currentPetLabel(): string {
-    return this.pets.find((pet) => pet.id === this.currentPetId)?.label ?? 'Codex Cat';
+    return this.pets.find((pet) => pet.id === this.currentPetId)?.label ?? '小猫';
   }
 
   private createSectionTitle(text: string): HTMLDivElement {
@@ -287,28 +323,5 @@ export class ContextMenu {
     title.className = 'ctx-section-title';
     title.textContent = text;
     return title;
-  }
-
-  private actionMeta(action: (typeof STATE_ITEMS)[number]['action']): string {
-    switch (action) {
-      case 'waving':
-        return 'Hello';
-      case 'review':
-        return 'Focus';
-      case 'running':
-        return 'Task';
-      case 'waiting':
-        return 'Input';
-      case 'jumping':
-        return 'Burst';
-      case 'running-right':
-        return 'Right';
-      case 'running-left':
-        return 'Left';
-      case 'idle':
-        return 'Reset';
-      default:
-        return '';
-    }
   }
 }

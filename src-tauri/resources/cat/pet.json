@@ -1,0 +1,6 @@
+{
+  "id": "cat",
+  "displayName": "小猫",
+  "description": "默认桌面宠物猫",
+  "spritesheetPath": "spritesheet.webp"
+}

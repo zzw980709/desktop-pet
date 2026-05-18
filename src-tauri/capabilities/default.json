@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "opener:default",
+    "dialog:default",
     "core:window:allow-set-position",
     "core:window:allow-cursor-position",
     "core:window:allow-start-dragging",

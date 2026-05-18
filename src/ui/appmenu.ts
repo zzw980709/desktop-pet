@@ -24,18 +24,23 @@ export class NativeAppMenu {
       items: [
         {
           id: 'desktop-pet',
-          text: 'Desktop Pet',
+          text: '桌面宠物',
           items: this.buildDesktopPetItems(),
         } satisfies SubmenuOptions,
         {
           id: 'actions',
-          text: 'Actions',
+          text: '动作',
           items: this.buildStateItems(),
         } satisfies SubmenuOptions,
         {
           id: 'switch-pet',
-          text: 'Switch Pet',
+          text: '切换宠物',
           items: this.buildPetItems(),
+        } satisfies SubmenuOptions,
+        {
+          id: 'manage',
+          text: '管理',
+          items: this.buildManageItems(),
         } satisfies SubmenuOptions,
       ],
     } satisfies MenuOptions);
@@ -44,7 +49,7 @@ export class NativeAppMenu {
   }
 
   private currentPetLabel(): string {
-    return this.pets.find((pet) => pet.id === this.currentPetId)?.label ?? 'Unknown Pet';
+    return this.pets.find((pet) => pet.id === this.currentPetId)?.label ?? '小猫';
   }
 
   private buildDesktopPetItems(): Array<MenuItemOptions | PredefinedMenuItemOptions> {
@@ -52,7 +57,7 @@ export class NativeAppMenu {
     if (this.currentPetId) {
       items.push({
         id: `current:${this.currentPetId}`,
-        text: `Current Pet: ${this.currentPetLabel()}`,
+        text: `当前宠物：${this.currentPetLabel()}`,
         enabled: false,
       });
     }
@@ -74,7 +79,7 @@ export class NativeAppMenu {
       return [
         {
           id: 'pet:none',
-          text: 'No pets available',
+          text: '无可用宠物',
           enabled: false,
         },
       ];
@@ -84,18 +89,41 @@ export class NativeAppMenu {
       if (pet.id === this.currentPetId) {
         return {
           id: `pet:${pet.id}`,
-          text: `Current Pet: ${pet.label}`,
+          text: `当前：${pet.label}`,
           enabled: false,
         };
       }
 
       return {
         id: `pet:${pet.id}`,
-        text: `Switch to ${pet.label}`,
+        text: pet.label,
         enabled: true,
         action: () => this.emit({ type: 'pet', petId: pet.id }),
       };
     });
+  }
+
+  private buildManageItems(): MenuItemOptions[] {
+    const items: MenuItemOptions[] = [
+      {
+        id: 'add-pet',
+        text: '添加宠物...',
+        enabled: true,
+        action: () => this.emit({ type: 'addPet' }),
+      },
+    ];
+
+    const currentPet = this.pets.find((p) => p.id === this.currentPetId);
+    if (currentPet && currentPet.removable) {
+      items.push({
+        id: 'remove-pet',
+        text: `移除 "${currentPet.label}"`,
+        enabled: true,
+        action: () => this.emit({ type: 'removePet', petId: currentPet.id }),
+      });
+    }
+
+    return items;
   }
 
   private emit(action: MenuAction): void {
