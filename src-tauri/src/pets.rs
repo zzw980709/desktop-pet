@@ -1,6 +1,35 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+pub fn read_webp_dimensions(data: &[u8]) -> Option<(u32, u32)> {
+    if data.len() < 30 || &data[0..4] != b"RIFF" || &data[8..12] != b"WEBP" {
+        return None;
+    }
+
+    match &data[12..16] {
+        b"VP8 " if data.len() >= 30 => {
+            let w = u16::from_le_bytes([data[26], data[27]]) as u32 & 0x3fff;
+            let h = u16::from_le_bytes([data[28], data[29]]) as u32 & 0x3fff;
+            Some((w, h))
+        }
+        b"VP8L" if data.len() >= 25 => {
+            let bits = u32::from_le_bytes([data[21], data[22], data[23], data[24]]);
+            let w = (bits & 0x3fff) + 1;
+            let h = ((bits >> 14) & 0x3fff) + 1;
+            Some((w, h))
+        }
+        b"VP8X" if data.len() >= 30 => {
+            let w = u32::from_le_bytes([data[24], data[25], data[26], 0]) + 1;
+            let h = u32::from_le_bytes([data[27], data[28], data[29], 0]) + 1;
+            Some((w, h))
+        }
+        _ => None,
+    }
+}
+
+pub const EXPECTED_SPRITESHEET_W: u32 = 1536;
+pub const EXPECTED_SPRITESHEET_H: u32 = 1872;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalPetRecord {
