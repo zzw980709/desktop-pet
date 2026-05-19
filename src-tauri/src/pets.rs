@@ -2,6 +2,24 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tracing::warn;
 
+pub fn read_image_dimensions(data: &[u8]) -> Option<(u32, u32)> {
+    if let Some(dims) = read_webp_dimensions(data) {
+        return Some(dims);
+    }
+    read_png_dimensions(data)
+}
+
+fn read_png_dimensions(data: &[u8]) -> Option<(u32, u32)> {
+    // PNG signature: 8 bytes, then IHDR chunk at offset 12
+    const PNG_SIG: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];
+    if data.len() < 33 || data[0..8] != PNG_SIG {
+        return None;
+    }
+    let w = u32::from_be_bytes([data[16], data[17], data[18], data[19]]);
+    let h = u32::from_be_bytes([data[20], data[21], data[22], data[23]]);
+    Some((w, h))
+}
+
 pub fn read_webp_dimensions(data: &[u8]) -> Option<(u32, u32)> {
     if data.len() < 30 || &data[0..4] != b"RIFF" || &data[8..12] != b"WEBP" {
         return None;

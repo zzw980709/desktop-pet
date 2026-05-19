@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window';
 import { LogicalPosition } from '@tauri-apps/api/dpi';
@@ -55,6 +55,31 @@ interface AddPetResult {
 interface RemovePetResult {
   success: boolean;
   error?: string;
+}
+
+interface SpritesheetValidation {
+  valid: boolean;
+  width: number;
+  height: number;
+  error?: string;
+}
+
+function validateSpritesheetDimensions(img: HTMLImageElement): SpritesheetValidation {
+  const w = img.naturalWidth;
+  const h = img.naturalHeight;
+  const EXPECTED_W = 1536;
+  const CELL_H = 208;
+  const MIN_H = 1872;
+  if (w !== EXPECTED_W) {
+    return { valid: false, width: w, height: h, error: `宽度须为 ${EXPECTED_W}px，实际 ${w}px` };
+  }
+  if (h < MIN_H) {
+    return { valid: false, width: w, height: h, error: `高度至少 ${MIN_H}px，实际 ${h}px` };
+  }
+  if (h % CELL_H !== 0) {
+    return { valid: false, width: w, height: h, error: `高度须为 ${CELL_H}px 的整倍数，实际 ${h}px` };
+  }
+  return { valid: true, width: w, height: h };
 }
 
 export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
@@ -161,6 +186,98 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
     syncMenuPets(pets, activePet.id);
   }
 
+  function showPetImportModal(): Promise<{ sourcePath: string; displayName: string } | null> {
+    return new Promise((resolve) => {
+      const overlay = document.getElementById('pet-import-overlay')!;
+      const pickBtn = document.getElementById('pet-import-pick-btn')!;
+      const fileInfo = document.getElementById('pet-import-file-info')!;
+      const nameInput = document.getElementById('pet-import-name-input') as HTMLInputElement;
+      const cancelBtn = document.getElementById('pet-import-cancel-btn')!;
+      const confirmBtn = document.getElementById('pet-import-confirm-btn')! as HTMLButtonElement;
+
+      let selectedPath: string | null = null;
+      let isValid = false;
+
+      function updateConfirm(): void {
+        confirmBtn.disabled = !(isValid && nameInput.value.trim().length > 0);
+      }
+
+      function resetModal(): void {
+        selectedPath = null;
+        isValid = false;
+        nameInput.value = '';
+        fileInfo.textContent = '';
+        fileInfo.className = 'pet-import-file-info';
+        confirmBtn.disabled = true;
+      }
+
+      pickBtn.addEventListener('click', async () => {
+        try {
+          const path = await invoke<string | null>('pick_spritesheet');
+          if (!path) return;
+
+          selectedPath = path;
+          const fileName = path.split(/[/\\]/).pop() || path;
+          fileInfo.textContent = `检查中: ${fileName}...`;
+          fileInfo.className = 'pet-import-file-info';
+
+          // Validate dimensions by loading the image
+          const assetUrl = convertFileSrc(path);
+          const img = new Image();
+          img.onload = () => {
+            const result = validateSpritesheetDimensions(img);
+            isValid = result.valid;
+            if (result.valid) {
+              fileInfo.textContent = `${fileName} (${result.width}x${result.height})`;
+              fileInfo.className = 'pet-import-file-info ok';
+            } else {
+              fileInfo.textContent = `${fileName} — ${result.error}`;
+              fileInfo.className = 'pet-import-file-info err';
+            }
+            updateConfirm();
+          };
+          img.onerror = () => {
+            isValid = false;
+            fileInfo.textContent = `无法读取: ${fileName}`;
+            fileInfo.className = 'pet-import-file-info err';
+            updateConfirm();
+          };
+          img.src = assetUrl;
+        } catch (err) {
+          console.error('[app] pick_spritesheet failed:', err);
+        }
+      });
+
+      nameInput.addEventListener('input', updateConfirm);
+
+      function cleanup(): void {
+        overlay.classList.remove('show');
+        resetModal();
+      }
+
+      cancelBtn.addEventListener('click', () => {
+        cleanup();
+        resolve(null);
+      });
+
+      confirmBtn.addEventListener('click', () => {
+        if (!selectedPath || !isValid || !nameInput.value.trim()) return;
+        const displayName = nameInput.value.trim();
+        cleanup();
+        resolve({ sourcePath: selectedPath, displayName });
+      });
+
+      // Close on backdrop click
+      overlay.querySelector('.pet-import-backdrop')?.addEventListener('click', () => {
+        cleanup();
+        resolve(null);
+      });
+
+      resetModal();
+      overlay.classList.add('show');
+    });
+  }
+
   animator.on(() => {
     behavior.handleAnimationEnd();
   });
@@ -206,11 +323,17 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
         break;
       case 'addPet':
         {
-          const result = await invoke<AddPetResult>('add_pet');
-          if (result.success) {
-            await refreshPets();
-          } else if (result.error) {
-            console.warn('[app] add pet failed:', result.error);
+          const result = await showPetImportModal();
+          if (result) {
+            const addResult = await invoke<AddPetResult>('add_pet_from_spritesheet', {
+              sourcePath: result.sourcePath,
+              displayName: result.displayName,
+            });
+            if (addResult.success) {
+              await refreshPets();
+            } else if (addResult.error) {
+              console.warn('[app] add pet failed:', addResult.error);
+            }
           }
         }
         break;

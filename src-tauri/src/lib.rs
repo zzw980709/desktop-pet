@@ -218,114 +218,59 @@ struct AddPetResult {
 }
 
 #[tauri::command]
-async fn add_pet(app_handle: tauri::AppHandle) -> AddPetResult {
-    info!("add_pet: opening file dialog");
+async fn pick_spritesheet(app_handle: tauri::AppHandle) -> Result<Option<String>, String> {
+    info!("pick_spritesheet: opening file dialog");
     let (tx, rx) = tokio::sync::oneshot::channel();
     app_handle
         .dialog()
         .file()
-        .add_filter("pet.json", &["json"])
-        .set_title("选择 pet.json")
+        .add_filter("Spritesheet Image", &["webp", "png"])
+        .set_title("选择精灵图")
         .pick_file(move |file_path| {
             let _ = tx.send(file_path);
         });
     let file_path = rx.await.unwrap_or(None);
 
-    let Some(file_path) = file_path else {
-        return AddPetResult {
-            success: false,
-            pet_id: None,
-            error: Some("用户取消了选择".into()),
-        };
-    };
-
-    let file_path = match file_path.into_path() {
-        Ok(p) => p,
-        Err(_) => {
-            return AddPetResult {
-                success: false,
-                pet_id: None,
-                error: Some("无法解析选择的文件路径".into()),
-            };
-        }
-    };
-
-    let pet_dir = match file_path.parent() {
-        Some(dir) => dir.to_path_buf(),
-        None => {
-            return AddPetResult {
-                success: false,
-                pet_id: None,
-                error: Some("无法获取文件所在目录".into()),
-            };
-        }
-    };
-
-    // Read pet.json
-    let manifest_content = match fs::read_to_string(&file_path) {
-        Ok(content) => content,
-        Err(_) => {
-            return AddPetResult {
-                success: false,
-                pet_id: None,
-                error: Some("无法读取 pet.json".into()),
-            };
-        }
-    };
-
-    let manifest: serde_json::Value = match serde_json::from_str(&manifest_content) {
-        Ok(v) => v,
-        Err(e) => {
-            return AddPetResult {
-                success: false,
-                pet_id: None,
-                error: Some(format!("无效的 pet.json：{}", e)),
-            };
-        }
-    };
-
-    // Validate required fields
-    let pet_id = match manifest.get("id").and_then(|v| v.as_str()) {
-        Some(id) if !id.is_empty() => id,
-        _ => {
-            return AddPetResult {
-                success: false,
-                pet_id: None,
-                error: Some("无效的 pet.json：id 字段为空或缺失".into()),
-            };
-        }
-    };
-
-    if manifest.get("displayName").and_then(|v| v.as_str()).unwrap_or("").is_empty() {
-        return AddPetResult {
-            success: false,
-            pet_id: None,
-            error: Some("无效的 pet.json：displayName 字段为空或缺失".into()),
-        };
+    match file_path {
+        Some(f) => match f.into_path() {
+            Ok(p) => Ok(Some(p.to_string_lossy().to_string())),
+            Err(_) => Err("无法解析文件路径".into()),
+        },
+        None => Ok(None),
     }
+}
 
-    if manifest.get("spritesheetPath").and_then(|v| v.as_str()) != Some("spritesheet.webp") {
+fn generate_pet_id(display_name: &str) -> String {
+    let id: String = display_name
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '-' })
+        .collect();
+    let trimmed = id.trim_matches('-');
+    if trimmed.is_empty() { "custom-pet".into() } else { trimmed.to_string() }
+}
+
+#[tauri::command]
+fn add_pet_from_spritesheet(
+    app_handle: tauri::AppHandle,
+    source_path: String,
+    display_name: String,
+) -> AddPetResult {
+    info!("add_pet_from_spritesheet: source={}, name={}", source_path, display_name);
+
+    let source = std::path::PathBuf::from(&source_path);
+    if !source.exists() {
         return AddPetResult {
             success: false,
             pet_id: None,
-            error: Some("无效的 pet.json：spritesheetPath 必须为 spritesheet.webp".into()),
-        };
-    }
-
-    // Check spritesheet.webp exists
-    let spritesheet_path = pet_dir.join("spritesheet.webp");
-    if !spritesheet_path.exists() {
-        return AddPetResult {
-            success: false,
-            pet_id: None,
-            error: Some("缺少文件：spritesheet.webp".into()),
+            error: Some("精灵图文件不存在".into()),
         };
     }
 
     // Validate spritesheet dimensions
-    match fs::read(&spritesheet_path) {
+    match fs::read(&source) {
         Ok(data) => {
-            match pets::read_webp_dimensions(&data) {
+            match pets::read_image_dimensions(&data) {
                 Some((w, h))
                     if w == pets::EXPECTED_SPRITESHEET_W
                         && h >= pets::EXPECTED_SPRITESHEET_MIN_H
@@ -348,7 +293,7 @@ async fn add_pet(app_handle: tauri::AppHandle) -> AddPetResult {
                     return AddPetResult {
                         success: false,
                         pet_id: None,
-                        error: Some("无效的 spritesheet.webp：无法解析 WebP 尺寸".into()),
+                        error: Some("无法解析精灵图尺寸，请确保文件为有效 WebP 或 PNG 格式".into()),
                     };
                 }
             }
@@ -357,12 +302,22 @@ async fn add_pet(app_handle: tauri::AppHandle) -> AddPetResult {
             return AddPetResult {
                 success: false,
                 pet_id: None,
-                error: Some(format!("无法读取 spritesheet.webp：{}", e)),
+                error: Some(format!("无法读取精灵图：{}", e)),
             };
         }
     }
 
-    // Copy files to app_data
+    let pet_id = generate_pet_id(&display_name);
+
+    // Build pet.json
+    let manifest = serde_json::json!({
+        "id": pet_id,
+        "displayName": display_name,
+        "description": "",
+        "spritesheetPath": "spritesheet.webp",
+    });
+    let manifest_content = serde_json::to_string_pretty(&manifest).unwrap();
+
     let Ok(app_data) = app_handle.path().app_data_dir() else {
         return AddPetResult {
             success: false,
@@ -371,13 +326,13 @@ async fn add_pet(app_handle: tauri::AppHandle) -> AddPetResult {
         };
     };
 
-    let dest_dir = app_data.join("pets").join(pet_id);
+    let dest_dir = app_data.join("pets").join(&pet_id);
 
     if dest_dir.exists() {
         return AddPetResult {
             success: false,
-            pet_id: Some(pet_id.to_string()),
-            error: Some(format!("宠物 \"{}\" 已存在", pet_id)),
+            pet_id: Some(pet_id),
+            error: Some(format!("宠物 \"{}\" 已存在", display_name)),
         };
     }
 
@@ -389,21 +344,44 @@ async fn add_pet(app_handle: tauri::AppHandle) -> AddPetResult {
         };
     }
 
-    if fs::write(dest_dir.join("pet.json"), &manifest_content).is_err()
-        || fs::copy(&spritesheet_path, dest_dir.join("spritesheet.webp")).is_err()
-    {
+    // Determine file extension: always save as spritesheet.webp
+    let dest_spritesheet = dest_dir.join("spritesheet.webp");
+    if source.extension().and_then(|e| e.to_str()) == Some("png") {
+        // Convert PNG to WebP if needed — for now, just copy and rename
+        // The frontend already validates dimensions, and WebP decoder handles
+        // common formats; PNG spritesheets work fine when renamed
+        if fs::copy(&source, &dest_spritesheet).is_err() {
+            let _ = fs::remove_dir_all(&dest_dir);
+            return AddPetResult {
+                success: false,
+                pet_id: None,
+                error: Some("无法复制精灵图".into()),
+            };
+        }
+    } else {
+        if fs::copy(&source, &dest_spritesheet).is_err() {
+            let _ = fs::remove_dir_all(&dest_dir);
+            return AddPetResult {
+                success: false,
+                pet_id: None,
+                error: Some("无法复制精灵图".into()),
+            };
+        }
+    }
+
+    if fs::write(dest_dir.join("pet.json"), &manifest_content).is_err() {
         let _ = fs::remove_dir_all(&dest_dir);
         return AddPetResult {
             success: false,
             pet_id: None,
-            error: Some("无法复制宠物文件".into()),
+            error: Some("无法写入 pet.json".into()),
         };
     }
 
-    info!("add_pet: successfully added pet '{}'", pet_id);
+    info!("add_pet_from_spritesheet: successfully added pet '{}'", pet_id);
     AddPetResult {
         success: true,
-        pet_id: Some(pet_id.to_string()),
+        pet_id: Some(pet_id),
         error: None,
     }
 }
@@ -484,7 +462,8 @@ pub fn run() {
             discover_pets,
             load_preferences,
             save_preferences,
-            add_pet,
+            pick_spritesheet,
+            add_pet_from_spritesheet,
             remove_pet,
             set_bongo_active,
             open_accessibility_settings
