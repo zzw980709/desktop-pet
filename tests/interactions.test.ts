@@ -70,7 +70,7 @@ describe('Interactions', () => {
 
     await vi.waitFor(() => {
       expect(behavior.handleDragStart).toHaveBeenCalledTimes(1);
-      expect(behavior.handleDragMove).toHaveBeenCalledWith(20, 2);
+      expect(behavior.handleDragMove).toHaveBeenCalledWith(20);
     });
   });
 
@@ -80,7 +80,7 @@ describe('Interactions', () => {
 
     await vi.waitFor(() => {
       expect(behavior.handleDragStart).toHaveBeenCalledTimes(1);
-      expect(behavior.handleDragMove).toHaveBeenCalledWith(-30, -2);
+      expect(behavior.handleDragMove).toHaveBeenCalledWith(-30);
     });
   });
 });

@@ -74,13 +74,13 @@ describe('BehaviorEngine', () => {
 
   it('dragging right switches to the running-right state', () => {
     engine.handleDragStart();
-    engine.handleDragMove(24, 1);
+    engine.handleDragMove(24);
     expect(engine.currentState).toBe('running-right');
   });
 
   it('dragging left switches to the running-left state', () => {
     engine.handleDragStart();
-    engine.handleDragMove(-24, 1);
+    engine.handleDragMove(-24);
     expect(engine.currentState).toBe('running-left');
   });
 

@@ -6,7 +6,6 @@ type StateChangeHandler = (newState: State, oldState: State) => void;
 
 const RESET_TO_IDLE_ON_END: State[] = ['waving', 'jumping', 'failed'];
 const RANDOM_IDLE_TRANSITIONS: State[] = ['running-right', 'running-left', 'jumping', 'running', 'waiting', 'review'];
-const DRAG_DIRECTION_THRESHOLD_PX = 12;
 const DRAG_SETTLE_MS = 180;
 const DIRECTIONAL_DRAG_STATES: State[] = ['running-right', 'running-left'];
 const MAX_RANDOM_ACTION_MS = 4000;
@@ -111,10 +110,8 @@ export class BehaviorEngine {
     this.dragSettleTimer = 0;
   }
 
-  handleDragMove(deltaX: number, _deltaY: number): void {
+  handleDragMove(deltaX: number): void {
     if (!this.dragging) return;
-    if (Math.abs(deltaX) < DRAG_DIRECTION_THRESHOLD_PX) return;
-
     this.transitionTo(deltaX > 0 ? 'running-right' : 'running-left');
   }
 

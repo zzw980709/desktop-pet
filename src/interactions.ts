@@ -8,10 +8,12 @@ export class Interactions {
   private startY = 0;
   private offsetX = 0;
   private offsetY = 0;
+  private accDeltaX = 0;
   private prevScreenX = 0;
   private prevScreenY = 0;
   private dragMoved = false;
   private readonly dragThreshold = 5;
+  private readonly directionThreshold = 8;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -31,6 +33,7 @@ export class Interactions {
     this.offsetY = e.offsetY;
     this.prevScreenX = e.screenX;
     this.prevScreenY = e.screenY;
+    this.accDeltaX = 0;
     this.dragMoved = false;
   };
 
@@ -45,11 +48,15 @@ export class Interactions {
     }
 
     if (this.dragMoved) {
-      const frameDeltaX = e.screenX - this.prevScreenX;
-      const frameDeltaY = e.screenY - this.prevScreenY;
+      this.accDeltaX += e.screenX - this.prevScreenX;
       this.prevScreenX = e.screenX;
       this.prevScreenY = e.screenY;
-      this.behavior.handleDragMove(frameDeltaX, frameDeltaY);
+
+      if (Math.abs(this.accDeltaX) >= this.directionThreshold) {
+        this.behavior.handleDragMove(this.accDeltaX);
+        this.accDeltaX = 0;
+      }
+
       try {
         await getCurrentWindow().setPosition(
           new LogicalPosition(e.screenX - this.offsetX, e.screenY - this.offsetY),
