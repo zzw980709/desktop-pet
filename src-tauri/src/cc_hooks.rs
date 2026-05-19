@@ -3,6 +3,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::Emitter;
 use tracing::{error, info, warn};
 
@@ -35,12 +36,8 @@ impl CcHookServer {
                 }
             };
 
-            listener
-                .set_nonblocking(false)
-                .expect("failed to set nonblocking");
-
             for stream in listener.incoming() {
-                if !running_clone.load(Ordering::SeqCst) {
+                if !running_clone.load(Ordering::Acquire) {
                     break;
                 }
 
@@ -62,70 +59,86 @@ impl CcHookServer {
     }
 
     pub fn shutdown(&self) {
-        self.running.store(false, Ordering::SeqCst);
-        // Self-connect to unblock accept()
+        self.running.store(false, Ordering::Release);
         let _ = TcpStream::connect(format!("127.0.0.1:{}", CC_HOOK_PORT));
     }
 }
 
+impl Drop for CcHookServer {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
+}
+
+fn http_err_response() -> &'static [u8] {
+    b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+}
+
 fn handle_connection(mut stream: TcpStream, app_handle: tauri::AppHandle) {
-    let mut reader = BufReader::new(stream.try_clone().unwrap_or_else(|_| {
-        unreachable!("BufReader clone should succeed for TCP stream")
-    }));
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
 
-    // Read request line
-    let mut request_line = String::new();
-    if reader.read_line(&mut request_line).is_err() {
-        return;
-    }
+    // Use a scope so the BufReader borrow ends before we write the response
+    let parse_result = {
+        let mut reader = BufReader::new(&mut stream);
 
-    if !request_line.starts_with("POST /event ") {
-        return;
-    }
-
-    // Read headers to find Content-Length
-    let mut content_length: usize = 0;
-    loop {
-        let mut line = String::new();
-        if reader.read_line(&mut line).is_err() {
+        let mut request_line = String::new();
+        if reader.read_line(&mut request_line).is_err() {
             return;
         }
-        if line == "\r\n" || line == "\n" {
-            break;
+
+        if !request_line.starts_with("POST /event ") {
+            let _ = stream.write_all(http_err_response());
+            return;
         }
-        let lower = line.to_lowercase();
-        if lower.starts_with("content-length:") {
-            if let Some(val) = line.split(':').nth(1) {
-                content_length = val.trim().parse().unwrap_or(0);
+
+        let mut content_length: usize = 0;
+        loop {
+            let mut line = String::new();
+            if reader.read_line(&mut line).is_err() {
+                let _ = stream.write_all(http_err_response());
+                return;
+            }
+            if line == "\r\n" || line == "\n" {
+                break;
+            }
+            let lower = line.to_lowercase();
+            if lower.starts_with("content-length:") {
+                if let Some(val) = line.split(':').nth(1) {
+                    content_length = val.trim().parse().unwrap_or(0);
+                }
             }
         }
-    }
 
-    if content_length == 0 {
-        return;
-    }
-
-    // Read body
-    let mut body = vec![0u8; content_length];
-    if reader.read_exact(&mut body).is_err() {
-        return;
-    }
-
-    let payload: CcEventPayload = match serde_json::from_slice(&body) {
-        Ok(p) => p,
-        Err(e) => {
-            warn!("cc-hook bad JSON: {}", e);
+        if content_length == 0 {
+            let _ = stream.write_all(http_err_response());
             return;
         }
+
+        let mut body = vec![0u8; content_length];
+        if reader.read_exact(&mut body).is_err() {
+            let _ = stream.write_all(http_err_response());
+            return;
+        }
+
+        match serde_json::from_slice::<CcEventPayload>(&body) {
+            Ok(p) => Some(p),
+            Err(e) => {
+                warn!("cc-hook bad JSON: {}", e);
+                let _ = stream.write_all(http_err_response());
+                None
+            }
+        }
     };
+    // BufReader borrow on &mut stream dropped here
 
-    info!("cc-hook event: {}", payload.event);
+    if let Some(payload) = parse_result {
+        info!("cc-hook event: {}", payload.event);
 
-    if let Err(e) = app_handle.emit("cc-event", payload.event) {
-        error!("cc-hook emit error: {}", e);
+        if let Err(e) = app_handle.emit("cc-event", payload.event) {
+            error!("cc-hook emit error: {}", e);
+        }
     }
 
-    // Send minimal HTTP response
     let response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
     let _ = stream.write_all(response.as_bytes());
 }
