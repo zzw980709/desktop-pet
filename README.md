@@ -1,141 +1,134 @@
 # Desktop Pet
 
-A Tauri desktop pet app built around a fixed Codex-style pet contract.
+A Tauri v2 desktop pet app for macOS. A transparent always-on-top window renders a pixel art cat that reacts to drag, click, and keyboard input (bongocat).
 
-The current built-in pet is `codex-cat`, a generated mascot cat atlas with directional drag movement, click reactions, a redesigned in-window context menu, and matching actions exposed through the native app menu.
+The built-in pet is `cat`, a pixel art mascot with directional drag movement, click-to-wave, random idle actions, and bongocat paw-tap animations triggered by keyboard typing.
 
 ## Features
 
 - Transparent always-on-top desktop pet window
-- Fixed 8x9 Codex pet atlas contract
+- 8×11 spritesheet atlas with pixel art animations
 - Drag-to-move with left/right directional animation
 - Click-to-wave interaction
-- Native app menu integration for pet actions and pet switching
-- Support for user-installed pets from `~/.codex/pets`
+- Random idle actions (running, jumping, waiting, reviewing)
+- **Bongocat** — paw-tap animations synced to left/right keyboard zones via CGEventTap
+- In-window context menu (right-click) and native macOS menu bar
+- Multi-pet support with add/remove from file dialog
 
 ## Run
 
-Install dependencies:
-
 ```bash
-npm install
+npm install          # Install dependencies
+npm run tauri dev    # Start dev mode with hot-reload
+npm run tauri build  # Production build (outputs DMG)
+npm test             # Run vitest test suite
 ```
 
-Start the desktop pet in development:
+Note: plain `npm run dev` only starts the Vite dev server — it does not launch the desktop pet window.
 
-```bash
-npm run tauri dev
-```
+## Atlas Contract
 
-Run the test suite:
+`spritesheet.webp` is a fixed 8-column grid with 192×208 px cells.
 
-```bash
-npm test
-```
+- Cell size: 192×208
+- Width: 1536 px (8 columns)
+- Height: 208 × N px (minimum 1872 px / 9 rows, currently 2288 px / 11 rows)
 
-Build the frontend bundle:
+Row order:
 
-```bash
-npm run build
-```
+| Row | State |
+|-----|-------|
+| 0 | idle |
+| 1 | running-right |
+| 2 | running-left |
+| 3 | waving |
+| 4 | jumping |
+| 5 | failed |
+| 6 | waiting |
+| 7 | running |
+| 8 | review |
+| 9 | bongo-left |
+| 10 | bongo-right |
 
-Build the desktop app:
+Unused cells must remain transparent.
 
-```bash
-npm run tauri build
-```
+## Interaction Model
+
+- **Left click:** wave
+- **Drag:** move the pet window; horizontal movement triggers `running-right`/`running-left`
+- **Right click:** in-window context menu
+- **Keyboard:** typing triggers bongocat paw-tap animations (left-zone keys → left paw, right-zone keys → right paw)
+- **Native app menu:** mirrors state actions, pet switching, and pet management
 
 ## Pet Contract
 
-Built-in pets live in:
+Built-in pets are bundled in `src-tauri/resources/<pet-id>/`. External pets are discovered from the app data directory (via `discover_pets` Rust command).
 
-```text
-src/pets/<pet-id>/
-  pet.json
-  spritesheet.webp
+Each pet directory contains:
+
 ```
-
-External pets are discovered from:
-
-```text
-~/.codex/pets/<pet-id>/
-  pet.json
-  spritesheet.webp
+pet.json          # Manifest with id, displayName, spritesheetPath
+spritesheet.webp  # Must match the atlas contract
 ```
 
 Minimal `pet.json`:
 
 ```json
 {
-  "id": "codex-cat",
-  "displayName": "Codex Cat",
-  "description": "A compact Codex-style mascot cat for the desktop runtime.",
+  "id": "cat",
+  "displayName": "Cat",
+  "description": "A pixel art desktop cat.",
   "spritesheetPath": "spritesheet.webp"
 }
 ```
 
-## Atlas Contract
-
-`spritesheet.webp` must be a fixed `8 x 9` atlas:
-
-- Cell size: `192x208`
-- Total size: `1536x1872`
-- Row order:
-  - `idle`
-  - `running-right`
-  - `running-left`
-  - `waving`
-  - `jumping`
-  - `failed`
-  - `waiting`
-  - `running`
-  - `review`
-
-Unused cells must remain transparent.
-
-## Interaction Model
-
-- Left click: wave
-- Drag: move the pet window
-- Horizontal drag: play `running-right` / `running-left`
-- Right click: open the in-window action menu
-- Native app menu: mirrors the same action set plus pet switching
-
 ## Project Structure
 
-```text
+```
 src/
-  app.ts                  runtime wiring
-  interactions.ts         click/drag handling
+  main.ts                 Entry point
+  app.ts                  Runtime wiring (init, render loop, menu handling)
+  interactions.ts         Click/drag handling on canvas
+  types.ts                Shared TypeScript types
   engine/
-    animator.ts           atlas frame progression
-    behavior.ts           runtime state machine
-    loader.ts             pet manifest and spritesheet loading
-    renderer.ts           canvas rendering
+    animator.ts           Atlas frame progression (per-state frame durations)
+    behavior.ts           Idle timer + random action state machine
+    loader.ts             Pet manifest/spriteheet loading and validation
+    renderer.ts           Canvas 2D rendering with pixel-art scaling
   pets/
-    contract.ts           atlas geometry and manifest validation
-    catalog.ts            built-in and external pet discovery
-    codex-cat/            built-in pet asset
+    contract.ts           Atlas geometry constants and manifest validation
+    catalog.ts            Pet discovery (Rust command bridge)
   ui/
-    menu-model.ts         shared menu actions
-    contextmenu.ts        in-window menu
-    appmenu.ts            native app menu integration
+    menu-model.ts         Shared menu action types and state items
+    contextmenu.ts        In-window HTML/CSS context menu
+    appmenu.ts            Native macOS menu bar integration
 
 src-tauri/
-  src/lib.rs              Tauri commands and app bootstrap
-  src/pets.rs             external pet filesystem discovery
+  src/lib.rs              Tauri commands, app bootstrap, preferences
+  src/pets.rs             External pet filesystem discovery + WebP dimension parser
+  src/bongo/
+    mod.rs
+    monitor.rs            CGEventTap keyboard monitor (3-thread architecture)
+    classifier.rs         QWERTY keycode → Left/Right zone classification
+  resources/cat/          Built-in pet (embedded at build time)
+  Cargo.toml
+
+scripts/
+  generate_bongo_frames.py   Bongo paw-tap animation frame generator (Pillow)
+  true_pixelate.py           Pixel art conversion script
 ```
 
 ## Adding a Custom Pet
 
-1. Create a directory under `~/.codex/pets/<pet-id>/`
-2. Add `pet.json`
-3. Add a valid `spritesheet.webp` matching the atlas contract
-4. Restart the app or reopen the menu so the catalog refreshes
+1. Use the "添加宠物..." menu item or select a `pet.json` via file dialog
+2. The directory must contain `pet.json` + `spritesheet.webp` matching the atlas contract
+3. The app copies the pet into its data directory and refreshes the menu
 
-If an external pet is malformed or its spritesheet size is invalid, it is skipped without breaking the app.
+## Bongo Keyboard Monitor
 
-## Notes
+The bongocat feature monitors global keyboard input via CGEventTap. It auto-starts on app launch (requires Accessibility permission on macOS). If permission is not granted, the monitor fails silently and bongo animations are skipped.
 
-- The app uses the Tauri window API, so plain `npm run dev` only starts the web dev server; it does not launch the desktop pet window.
-- The repo ignores local generation and tool artifacts such as `tmp/`, `.agents/`, `assets/`, and `src-tauri/target/`.
+Three-thread architecture:
+1. **CGEventTap thread** — C callback does only atomic stores (lock-free), runs CFRunLoop
+2. **Key poller thread** — reads atomic buffer every 500µs, classifies keycodes by QWERTY zone
+3. **Forwarder thread** — emits `bongo-tap` events to the Tauri frontend
