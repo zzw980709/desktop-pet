@@ -11,7 +11,7 @@ import { NativeAppMenu } from './ui/appmenu';
 import type { MenuAction } from './ui/menu-model';
 import { CELL_HEIGHT, CELL_WIDTH } from './pets/contract';
 import { discoverPets } from './pets/catalog';
-import type { PetCatalogEntry, Preferences } from './types';
+import type { PetCatalogEntry, PetState, Preferences } from './types';
 
 const DRAG_ANIMATED_STATES = new Set(['running-right', 'running-left']);
 
@@ -369,6 +369,22 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
           }
         }
         break;
+      case 'installCcHooks':
+        {
+          const result = await invoke<{ success: boolean; error?: string }>('install_cc_hooks');
+          if (!result.success && result.error) {
+            console.warn('[app] install CC hooks failed:', result.error);
+          }
+        }
+        break;
+      case 'uninstallCcHooks':
+        {
+          const result = await invoke<{ success: boolean; error?: string }>('uninstall_cc_hooks');
+          if (!result.success && result.error) {
+            console.warn('[app] uninstall CC hooks failed:', result.error);
+          }
+        }
+        break;
     }
   }
 
@@ -382,6 +398,26 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
       animator.play(bongoState);
     } catch (err) {
       console.error('[app] bongo tap error:', err);
+    }
+  });
+
+  // CC Hook event listener
+  void listen<string>('cc-event', (event) => {
+    try {
+      const stateMap: Record<string, PetState> = {
+        'thinking': 'review',
+        'tool-calling': 'running',
+        'waiting': 'waiting',
+        'context-compacted': 'failed',
+        'completion': 'waving',
+      };
+      const petState = stateMap[event.payload];
+      if (petState) {
+        behavior.forceState(petState);
+        animator.play(petState);
+      }
+    } catch (err) {
+      console.error('[app] cc-event error:', err);
     }
   });
 
