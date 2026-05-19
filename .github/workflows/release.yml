@@ -1,0 +1,47 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        run: npm run tauri build
+        env:
+          APPLE_SIGNING_IDENTITY: ""
+          APPLE_CERTIFICATE: ""
+          APPLE_CERTIFICATE_PASSWORD: ""
+          APPLE_TEAM_ID: ""
+
+      - name: Set tag name
+        id: tag
+        run: |
+          TAG="v$(node -p "require('./package.json').version")-$(date +%Y%m%d)-$(git rev-parse --short HEAD)"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          files: src-tauri/target/release/bundle/dmg/*.dmg
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
