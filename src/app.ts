@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window';
 import { LogicalPosition } from '@tauri-apps/api/dpi';
 import { loadPet } from './engine/loader';
 import { Renderer } from './engine/renderer';
@@ -37,12 +37,22 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
 
   if (prefs.windowPosition) {
     try {
-      const { x, y } = prefs.windowPosition;
-      // Clamp negative coordinates that might place window off-screen
-      const clampedX = Math.max(-32, x);
-      const clampedY = Math.max(0, y);
+      const winWidth = 64 * getRenderScale(canvas);
+      const winHeight = 64 * getRenderScale(canvas);
+      let { x, y } = prefs.windowPosition;
+
+      // Clamp to current monitor bounds (accounting for Retina scale)
+      const monitor = await currentMonitor().catch(() => null);
+      if (monitor) {
+        const scale = monitor.scaleFactor;
+        const maxX = Math.max(0, (monitor.size.width / scale) - winWidth);
+        const maxY = Math.max(0, (monitor.size.height / scale) - winHeight);
+        x = Math.max(-32, Math.min(x, maxX));
+        y = Math.max(0, Math.min(y, maxY));
+      }
+
       await getCurrentWindow().setPosition(
-        new LogicalPosition(clampedX, clampedY),
+        new LogicalPosition(x, y),
       );
     } catch {
       // window position restore is best-effort
