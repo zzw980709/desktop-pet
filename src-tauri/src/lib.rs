@@ -441,8 +441,6 @@ fn remove_pet(app_handle: tauri::AppHandle, pet_id: String) -> RemovePetResult {
     }
 }
 
-const CC_HOOK_PORT: u16 = 18920;
-
 fn cc_hooks_dir() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("/tmp"))
@@ -492,16 +490,19 @@ fn install_cc_hooks() -> CcHookResult {
 
     let settings_path = cc_settings_path();
 
-    // Backup existing settings
+    // Backup existing settings (only if no previous backup exists)
     if settings_path.exists() {
-        match fs::copy(&settings_path, cc_settings_backup_path()) {
-            Ok(_) => info!("backed up settings.json"),
-            Err(e) => {
-                error!("failed to backup settings.json: {}", e);
-                return CcHookResult {
-                    success: false,
-                    error: Some(format!("无法备份 settings.json: {}", e)),
-                };
+        let backup_path = cc_settings_backup_path();
+        if !backup_path.exists() {
+            match fs::copy(&settings_path, &backup_path) {
+                Ok(_) => info!("backed up settings.json"),
+                Err(e) => {
+                    error!("failed to backup settings.json: {}", e);
+                    return CcHookResult {
+                        success: false,
+                        error: Some(format!("无法备份 settings.json: {}", e)),
+                    };
+                }
             }
         }
     }
@@ -532,17 +533,12 @@ fn install_cc_hooks() -> CcHookResult {
     };
 
     // Write hook config
-    let hooks = settings
+    let hooks_obj = settings
         .as_object_mut()
-        .and_then(|obj| {
-            Some(
-                obj.entry("hooks")
-                    .or_insert_with(|| serde_json::json!({})),
-            )
-        })
+        .map(|obj| obj.entry("hooks").or_insert_with(|| serde_json::json!({})))
         .and_then(|v| v.as_object_mut());
 
-    let Some(hooks_obj) = hooks else {
+    let Some(hooks_obj) = hooks_obj else {
         return CcHookResult {
             success: false,
             error: Some("无法解析 settings.json hooks 字段".into()),
@@ -562,7 +558,16 @@ fn install_cc_hooks() -> CcHookResult {
     }
 
     // Write updated settings
-    let content = serde_json::to_string_pretty(&settings).unwrap_or_default();
+    let content = match serde_json::to_string_pretty(&settings) {
+        Ok(c) => c,
+        Err(e) => {
+            error!("failed to serialize settings.json: {}", e);
+            return CcHookResult {
+                success: false,
+                error: Some(format!("序列化 settings.json 失败: {}", e)),
+            };
+        }
+    };
     if let Err(e) = fs::write(&settings_path, &content) {
         error!("failed to write settings.json: {}", e);
         return CcHookResult {
@@ -581,7 +586,7 @@ fn install_cc_hooks() -> CcHookResult {
         };
     }
 
-    let notify_script = NOTIFY_SCRIPT.replace("PORT", &CC_HOOK_PORT.to_string());
+    let notify_script = NOTIFY_SCRIPT.replace("PORT", &cc_hooks::CC_HOOK_PORT.to_string());
     if let Err(e) = fs::write(hooks_dir.join("notify.sh"), &notify_script) {
         error!("failed to write notify.sh: {}", e);
         return CcHookResult {
@@ -594,10 +599,12 @@ fn install_cc_hooks() -> CcHookResult {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(
+        if let Err(e) = fs::set_permissions(
             hooks_dir.join("notify.sh"),
             std::fs::Permissions::from_mode(0o755),
-        );
+        ) {
+            warn!("failed to make notify.sh executable: {}", e);
+        }
     }
 
     info!("install_cc_hooks: successfully installed");
@@ -631,14 +638,29 @@ fn uninstall_cc_hooks() -> CcHookResult {
     } else {
         warn!("no backup found, removing hooks from settings.json");
         if settings_path.exists() {
-            if let Ok(content) = fs::read_to_string(&settings_path) {
-                if let Ok(mut settings) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if let Some(obj) = settings.as_object_mut() {
-                        obj.remove("hooks");
+            match fs::read_to_string(&settings_path) {
+                Ok(content) => {
+                    match serde_json::from_str::<serde_json::Value>(&content) {
+                        Ok(mut settings) => {
+                            if let Some(obj) = settings.as_object_mut() {
+                                obj.remove("hooks");
+                                match serde_json::to_string_pretty(&settings) {
+                                    Ok(new_content) => {
+                                        let _ = fs::write(&settings_path, new_content);
+                                    }
+                                    Err(e) => {
+                                        warn!("failed to serialize settings.json after removing hooks: {}", e);
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!("failed to parse settings.json during uninstall: {}", e);
+                        }
                     }
-                    let new_content =
-                        serde_json::to_string_pretty(&settings).unwrap_or_default();
-                    let _ = fs::write(&settings_path, new_content);
+                }
+                Err(e) => {
+                    warn!("failed to read settings.json during uninstall: {}", e);
                 }
             }
         }

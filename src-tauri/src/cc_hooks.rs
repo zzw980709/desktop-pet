@@ -7,7 +7,7 @@ use std::time::Duration;
 use tauri::Emitter;
 use tracing::{error, info, warn};
 
-const CC_HOOK_PORT: u16 = 18920;
+pub const CC_HOOK_PORT: u16 = 18920;
 
 #[derive(Debug, Deserialize)]
 struct CcEventPayload {
