@@ -42,6 +42,7 @@ export class Interactions {
 
     if (!this.dragMoved && (Math.abs(totalDeltaX) > this.dragThreshold || Math.abs(totalDeltaY) > this.dragThreshold)) {
       this.dragMoved = true;
+      this.behavior.suspendRoaming();
       this.behavior.handleDragStart();
     }
 
@@ -70,6 +71,7 @@ export class Interactions {
 
     if (this.dragMoved) {
       this.behavior.handleDragEnd();
+      this.behavior.resumeRoaming();
     } else {
       this.behavior.handleClick();
     }

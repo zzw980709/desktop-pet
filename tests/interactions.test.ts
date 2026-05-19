@@ -23,6 +23,8 @@ type MockBehavior = {
   handleDragMove: ReturnType<typeof vi.fn>;
   handleDragEnd: ReturnType<typeof vi.fn>;
   handleClick: ReturnType<typeof vi.fn>;
+  suspendRoaming: ReturnType<typeof vi.fn>;
+  resumeRoaming: ReturnType<typeof vi.fn>;
 };
 
 function dispatchMouseEvent(
@@ -55,6 +57,8 @@ describe('Interactions', () => {
       handleDragMove: vi.fn(),
       handleDragEnd: vi.fn(),
       handleClick: vi.fn(),
+      suspendRoaming: vi.fn(),
+      resumeRoaming: vi.fn(),
     };
     new Interactions(canvas, behavior as never);
   });
