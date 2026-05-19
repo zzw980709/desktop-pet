@@ -45,6 +45,7 @@ beforeEach(() => {
   imageScenarios.clear();
   vi.stubGlobal('Image', MockImage as unknown as typeof Image);
   vi.spyOn(console, 'warn').mockImplementation(() => {});
+  vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -66,6 +67,26 @@ describe('validatePetManifest', () => {
       description: 'Mascot cat',
       spritesheetPath: SPRITESHEET_PATH,
     });
+  });
+
+  it('fills missing displayName and description with defaults', () => {
+    expect(validatePetManifest({
+      id: 'cat',
+      spritesheetPath: SPRITESHEET_PATH,
+    })).toEqual({
+      id: 'cat',
+      displayName: 'cat',
+      description: '',
+      spritesheetPath: SPRITESHEET_PATH,
+    });
+  });
+
+  it('rejects missing id', () => {
+    expect(validatePetManifest({
+      displayName: 'X',
+      description: 'Y',
+      spritesheetPath: SPRITESHEET_PATH,
+    })).toBeNull();
   });
 
   it('rejects missing spritesheetPath', () => {
@@ -130,24 +151,28 @@ describe('loadPet', () => {
     expect(console.warn).not.toHaveBeenCalled();
   });
 
-  it('returns null when the image size does not match the fixed atlas contract', async () => {
+  it('returns placeholder when the image size does not match the fixed atlas contract', async () => {
     imageScenarios.set('bad-size.webp', {
       width: CELL_WIDTH * (ATLAS_COLUMNS - 1),
       height: CELL_HEIGHT * ATLAS_ROWS,
     });
 
-    await expect(loadPet(manifest, 'bad-size.webp')).resolves.toBeNull();
-    expect(console.warn).toHaveBeenCalledWith('[loader] Spritesheet size mismatch for codex-cat');
+    const loaded = await loadPet(manifest, 'bad-size.webp');
+    expect(loaded).not.toBeNull();
+    expect(loaded?.manifest).toEqual(manifest);
+    expect(console.warn).toHaveBeenCalledWith('[loader] Spritesheet size mismatch for codex-cat, using placeholder');
   });
 
-  it('returns null when the image fails to load', async () => {
+  it('returns placeholder when the image fails to load', async () => {
     imageScenarios.set('missing.webp', {
       width: 0,
       height: 0,
       error: true,
     });
 
-    await expect(loadPet(manifest, 'missing.webp')).resolves.toBeNull();
-    expect(console.warn).toHaveBeenCalledWith('[loader] Failed to load spritesheet for codex-cat');
+    const loaded = await loadPet(manifest, 'missing.webp');
+    expect(loaded).not.toBeNull();
+    expect(loaded?.manifest).toEqual(manifest);
+    expect(console.error).toHaveBeenCalledWith('[loader] Failed to load spritesheet for codex-cat, using placeholder');
   });
 });

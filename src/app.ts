@@ -37,8 +37,12 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
 
   if (prefs.windowPosition) {
     try {
+      const { x, y } = prefs.windowPosition;
+      // Clamp negative coordinates that might place window off-screen
+      const clampedX = Math.max(-32, x);
+      const clampedY = Math.max(0, y);
       await getCurrentWindow().setPosition(
-        new LogicalPosition(prefs.windowPosition.x, prefs.windowPosition.y),
+        new LogicalPosition(clampedX, clampedY),
       );
     } catch {
       // window position restore is best-effort
@@ -138,10 +142,18 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
     behavior.handleAnimationEnd();
   });
 
-  const switched = await switchPet(preferredPet);
+  let switched = await switchPet(preferredPet);
   if (!switched) {
-    console.error(`Failed to load initial pet ${preferredPet.id}`);
-    return;
+    // Try fallback: iterate through available pets
+    const fallback = pets.find((p) => p.id !== preferredPet.id);
+    if (fallback) {
+      console.warn(`[app] initial pet ${preferredPet.id} failed, falling back to ${fallback.id}`);
+      switched = await switchPet(fallback);
+    }
+    if (!switched) {
+      console.error(`[app] failed to load any pet`);
+      return;
+    }
   }
 
   let heartAlpha = 0;
@@ -217,32 +229,45 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
 
   let lastTime = performance.now();
 
+  let loopErrorCount = 0;
+  let loopErrorTime = 0;
+
   function loop(currentTime: number): void {
-    const deltaMs = currentTime - lastTime;
-    lastTime = currentTime;
+    try {
+      const deltaMs = currentTime - lastTime;
+      lastTime = currentTime;
 
-    behavior.tick(deltaMs);
+      behavior.tick(deltaMs);
 
-    const shouldAnimateWhileDragging =
-      behavior.isDragging && DRAG_ANIMATED_STATES.has(behavior.currentState);
+      const shouldAnimateWhileDragging =
+        behavior.isDragging && DRAG_ANIMATED_STATES.has(behavior.currentState);
 
-    if (behavior.isDragging && !shouldAnimateWhileDragging) {
-      if (!animator.isPaused) {
-        animator.pause();
+      if (behavior.isDragging && !shouldAnimateWhileDragging) {
+        if (!animator.isPaused) {
+          animator.pause();
+        }
+      } else {
+        if (animator.isPaused) {
+          animator.resume();
+        }
+        animator.tick(deltaMs);
       }
-    } else {
-      if (animator.isPaused) {
-        animator.resume();
+
+      renderer.drawFrame(animator.currentCell);
+
+      if (heartAlpha > 0) {
+        heartTimer -= deltaMs;
+        heartAlpha = Math.max(0, heartTimer / HEART_DURATION);
+        renderer.drawHeart(heartAlpha);
       }
-      animator.tick(deltaMs);
-    }
-
-    renderer.drawFrame(animator.currentCell);
-
-    if (heartAlpha > 0) {
-      heartTimer -= deltaMs;
-      heartAlpha = Math.max(0, heartTimer / HEART_DURATION);
-      renderer.drawHeart(heartAlpha);
+    } catch (err) {
+      // Rate-limit loop errors to 1 per 2 seconds
+      const now = performance.now();
+      if (now - loopErrorTime > 2000) {
+        loopErrorTime = now;
+        loopErrorCount++;
+        console.error(`[app] render loop error (count=${loopErrorCount}):`, err);
+      }
     }
 
     requestAnimationFrame(loop);

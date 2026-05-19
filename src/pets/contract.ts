@@ -18,14 +18,20 @@ export function validatePetManifest(data: unknown): PetManifest | null {
   const value = data as Record<string, unknown>;
 
   if (typeof value.id !== 'string' || !value.id) return null;
-  if (typeof value.displayName !== 'string' || !value.displayName) return null;
-  if (typeof value.description !== 'string' || !value.description) return null;
   if (value.spritesheetPath !== SPRITESHEET_PATH) return null;
+
+  // Default missing optional fields for resilience
+  const displayName = typeof value.displayName === 'string' && value.displayName
+    ? value.displayName
+    : value.id;
+  const description = typeof value.description === 'string' && value.description
+    ? value.description
+    : '';
 
   return {
     id: value.id,
-    displayName: value.displayName,
-    description: value.description,
+    displayName,
+    description,
     spritesheetPath: SPRITESHEET_PATH,
   };
 }

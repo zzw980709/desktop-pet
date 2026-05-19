@@ -8,20 +8,42 @@ export function validatePetSpritesheet(img: HTMLImageElement): boolean {
     && img.naturalHeight === CELL_HEIGHT * ATLAS_ROWS;
 }
 
+function createPlaceholderImage(): HTMLImageElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = CELL_WIDTH * ATLAS_COLUMNS;
+  canvas.height = CELL_HEIGHT * ATLAS_ROWS;
+  const ctx = canvas.getContext('2d')!;
+  // Fill with striped pattern to visually indicate placeholder
+  ctx.fillStyle = '#666666';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#555555';
+  for (let row = 0; row < ATLAS_ROWS; row++) {
+    for (let col = 0; col < ATLAS_COLUMNS; col++) {
+      if ((row + col) % 2 === 0) {
+        ctx.fillRect(col * CELL_WIDTH, row * CELL_HEIGHT, CELL_WIDTH, CELL_HEIGHT);
+      }
+    }
+  }
+
+  const img = new Image();
+  img.src = canvas.toDataURL();
+  return img;
+}
+
 export async function loadPet(manifest: PetManifest, imageSrc: string): Promise<LoadedPet | null> {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
       if (!validatePetSpritesheet(img)) {
-        console.warn(`[loader] Spritesheet size mismatch for ${manifest.id}`);
-        resolve(null);
+        console.warn(`[loader] Spritesheet size mismatch for ${manifest.id}, using placeholder`);
+        resolve({ manifest, spritesheet: createPlaceholderImage() });
         return;
       }
       resolve({ manifest, spritesheet: img });
     };
     img.onerror = () => {
-      console.warn(`[loader] Failed to load spritesheet for ${manifest.id}`);
-      resolve(null);
+      console.error(`[loader] Failed to load spritesheet for ${manifest.id}, using placeholder`);
+      resolve({ manifest, spritesheet: createPlaceholderImage() });
     };
     img.src = imageSrc;
   });

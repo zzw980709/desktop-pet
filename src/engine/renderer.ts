@@ -8,6 +8,7 @@ export class Renderer {
   private offscreen: HTMLCanvasElement;
   private offCtx: CanvasRenderingContext2D;
   private pet: LoadedPet | null = null;
+  private lastErrorTime = 0;
 
   readonly scale: number;
   readonly frameWidth: number;
@@ -39,11 +40,20 @@ export class Renderer {
 
     if (!this.pet) return;
 
-    const { sx, sy, sw, sh } = getFrameRect(cell.row, cell.column);
+    try {
+      const { sx, sy, sw, sh } = getFrameRect(cell.row, cell.column);
 
-    this.offCtx.clearRect(0, 0, this.offscreen.width, this.offscreen.height);
-    this.offCtx.drawImage(this.pet.spritesheet, sx, sy, sw, sh, 0, 0, sw, sh);
-    this.ctx.drawImage(this.offscreen, 0, 0, this.frameWidth, this.frameHeight, 0, 0, this.canvas.width, this.canvas.height);
+      this.offCtx.clearRect(0, 0, this.offscreen.width, this.offscreen.height);
+      this.offCtx.drawImage(this.pet.spritesheet, sx, sy, sw, sh, 0, 0, sw, sh);
+      this.ctx.drawImage(this.offscreen, 0, 0, this.frameWidth, this.frameHeight, 0, 0, this.canvas.width, this.canvas.height);
+    } catch (err) {
+      // Rate-limit frame errors to 1 per second
+      const now = performance.now();
+      if (now - this.lastErrorTime > 1000) {
+        console.error('[renderer] drawFrame error:', err);
+        this.lastErrorTime = now;
+      }
+    }
   }
 
   private static readonly HEART: [number, number][] = [

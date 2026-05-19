@@ -2,6 +2,9 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
+use tracing::{error, info, warn};
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use tracing_appender::rolling::RollingFileAppender;
 
 mod pets;
 
@@ -22,9 +25,11 @@ fn init_builtin_pet(app_data: &PathBuf) {
     let cat_dir = pets_dir.join(BUILTIN_PET_ID);
 
     if cat_dir.exists() {
+        info!("built-in pet 'cat' already exists, skipping");
         return;
     }
 
+    info!("initializing built-in pet 'cat'");
     let _ = fs::create_dir_all(&cat_dir);
     let _ = fs::write(cat_dir.join("pet.json"), BUILTIN_MANIFEST);
     let _ = fs::write(cat_dir.join("spritesheet.webp"), BUILTIN_SPRITESHEET);
@@ -33,7 +38,23 @@ fn init_builtin_pet(app_data: &PathBuf) {
 fn init_preferences(app_data: &PathBuf) {
     let prefs_path = preferences_path(app_data);
     if prefs_path.exists() {
-        return;
+        // Validate existing preferences; if corrupted, back up and rewrite
+        match fs::read_to_string(&prefs_path) {
+            Ok(content) => {
+                if serde_json::from_str::<serde_json::Value>(&content).is_ok() {
+                    info!("preferences.json exists and is valid");
+                    return;
+                }
+                warn!("preferences.json is corrupted, backing up and resetting");
+                let backup = app_data.join("preferences.json.bak");
+                let _ = fs::write(&backup, &content);
+            }
+            Err(e) => {
+                warn!("failed to read preferences.json: {}, resetting", e);
+            }
+        }
+    } else {
+        info!("preferences.json not found, creating default");
     }
 
     let default_prefs = serde_json::json!({
@@ -46,13 +67,41 @@ fn init_preferences(app_data: &PathBuf) {
     let _ = fs::write(&prefs_path, default_prefs.to_string());
 }
 
+fn init_logging(app_data: &PathBuf) {
+    let log_dir = app_data.join("logs");
+    let _ = fs::create_dir_all(&log_dir);
+    let file_appender = RollingFileAppender::builder()
+        .rotation(tracing_appender::rolling::Rotation::DAILY)
+        .filename_prefix("pet")
+        .filename_suffix("log")
+        .max_log_files(5)
+        .build(log_dir)
+        .unwrap();
+    let file_layer = fmt::layer()
+        .with_ansi(false)
+        .with_writer(file_appender);
+    let stdout_layer = fmt::layer()
+        .with_writer(std::io::stdout);
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info"));
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(file_layer)
+        .with(stdout_layer)
+        .init();
+}
+
 fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let app_data = app.path().app_data_dir()?;
     let _ = fs::create_dir_all(&app_data);
 
+    init_logging(&app_data);
+    info!("app data directory: {:?}", app_data);
+
     init_builtin_pet(&app_data);
     init_preferences(&app_data);
 
+    info!("application setup complete");
     Ok(())
 }
 
@@ -75,20 +124,25 @@ struct WindowPosition {
 #[tauri::command]
 fn discover_pets(app_handle: tauri::AppHandle) -> Vec<pets::ExternalPetRecord> {
     let Ok(app_data) = app_handle.path().app_data_dir() else {
+        error!("failed to get app_data dir during pet discovery");
         return Vec::new();
     };
     let pet_root = app_pets_dir(&app_data);
 
     if !pet_root.exists() {
         let _ = fs::create_dir_all(&pet_root);
+        info!("created pets directory: {:?}", pet_root);
     }
 
-    pets::discover_pets(&pet_root)
+    let pets = pets::discover_pets(&pet_root);
+    info!("discovered {} pet(s) in {:?}", pets.len(), pet_root);
+    pets
 }
 
 #[tauri::command]
 fn load_preferences(app_handle: tauri::AppHandle) -> Preferences {
     let Ok(app_data) = app_handle.path().app_data_dir() else {
+        error!("failed to get app_data dir when loading preferences");
         return Preferences {
             active_pet_id: "cat".into(),
             window_position: None,
@@ -98,15 +152,27 @@ fn load_preferences(app_handle: tauri::AppHandle) -> Preferences {
     let prefs_path = preferences_path(&app_data);
     match fs::read_to_string(&prefs_path) {
         Ok(content) => {
-            serde_json::from_str(&content).unwrap_or_else(|_| Preferences {
+            match serde_json::from_str::<Preferences>(&content) {
+                Ok(prefs) => {
+                    info!("loaded preferences: activePetId={}", prefs.active_pet_id);
+                    prefs
+                }
+                Err(e) => {
+                    warn!("failed to parse preferences.json: {}, using defaults", e);
+                    Preferences {
+                        active_pet_id: "cat".into(),
+                        window_position: None,
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            warn!("failed to read preferences.json: {}, using defaults", e);
+            Preferences {
                 active_pet_id: "cat".into(),
                 window_position: None,
-            })
+            }
         }
-        Err(_) => Preferences {
-            active_pet_id: "cat".into(),
-            window_position: None,
-        },
     }
 }
 
@@ -115,7 +181,10 @@ fn save_preferences(app_handle: tauri::AppHandle, preferences: Preferences) -> R
     let app_data = app_handle
         .path()
         .app_data_dir()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            error!("failed to get app_data dir when saving preferences: {}", e);
+            e.to_string()
+        })?;
 
     let prefs_path = preferences_path(&app_data);
     if let Some(parent) = prefs_path.parent() {
@@ -124,6 +193,7 @@ fn save_preferences(app_handle: tauri::AppHandle, preferences: Preferences) -> R
 
     let content = serde_json::to_string_pretty(&preferences).map_err(|e| e.to_string())?;
     fs::write(&prefs_path, content).map_err(|e| e.to_string())?;
+    info!("saved preferences: activePetId={}", preferences.active_pet_id);
 
     Ok(())
 }
@@ -140,6 +210,7 @@ struct AddPetResult {
 
 #[tauri::command]
 fn add_pet(app_handle: tauri::AppHandle) -> AddPetResult {
+    info!("add_pet: opening file dialog");
     let file_path = app_handle
         .dialog()
         .file()
@@ -309,6 +380,7 @@ fn add_pet(app_handle: tauri::AppHandle) -> AddPetResult {
         };
     }
 
+    info!("add_pet: successfully added pet '{}'", pet_id);
     AddPetResult {
         success: true,
         pet_id: Some(pet_id.to_string()),
@@ -325,7 +397,9 @@ struct RemovePetResult {
 
 #[tauri::command]
 fn remove_pet(app_handle: tauri::AppHandle, pet_id: String) -> RemovePetResult {
+    info!("remove_pet: requested removal of '{}'", pet_id);
     if pet_id == BUILTIN_PET_ID {
+        warn!("remove_pet: rejected removal of built-in pet");
         return RemovePetResult {
             success: false,
             error: Some("内置宠物不可移除".into()),
@@ -333,6 +407,7 @@ fn remove_pet(app_handle: tauri::AppHandle, pet_id: String) -> RemovePetResult {
     }
 
     let Ok(app_data) = app_handle.path().app_data_dir() else {
+        error!("remove_pet: failed to get app_data dir");
         return RemovePetResult {
             success: false,
             error: Some("无法获取应用数据目录".into()),
@@ -342,6 +417,7 @@ fn remove_pet(app_handle: tauri::AppHandle, pet_id: String) -> RemovePetResult {
     let pet_dir = app_data.join("pets").join(&pet_id);
 
     if !pet_dir.exists() {
+        warn!("remove_pet: pet '{}' does not exist", pet_id);
         return RemovePetResult {
             success: false,
             error: Some(format!("宠物 \"{}\" 不存在", pet_id)),
@@ -349,14 +425,20 @@ fn remove_pet(app_handle: tauri::AppHandle, pet_id: String) -> RemovePetResult {
     }
 
     match fs::remove_dir_all(&pet_dir) {
-        Ok(_) => RemovePetResult {
-            success: true,
-            error: None,
-        },
-        Err(e) => RemovePetResult {
-            success: false,
-            error: Some(format!("无法删除宠物目录：{}", e)),
-        },
+        Ok(_) => {
+            info!("remove_pet: successfully removed '{}'", pet_id);
+            RemovePetResult {
+                success: true,
+                error: None,
+            }
+        }
+        Err(e) => {
+            error!("remove_pet: failed to remove '{}': {}", pet_id, e);
+            RemovePetResult {
+                success: false,
+                error: Some(format!("无法删除宠物目录：{}", e)),
+            }
+        }
     }
 }
 

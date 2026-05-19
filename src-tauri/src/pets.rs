@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use tracing::warn;
 
 pub fn read_webp_dimensions(data: &[u8]) -> Option<(u32, u32)> {
     if data.len() < 30 || &data[0..4] != b"RIFF" || &data[8..12] != b"WEBP" {
@@ -59,6 +60,8 @@ pub fn discover_pets(root: &Path) -> Vec<ExternalPetRecord> {
                         manifest,
                         spritesheet_path: spritesheet_path.to_string_lossy().to_string(),
                     });
+                } else {
+                    warn!("skipped malformed pet.json in {:?}", pet_dir);
                 }
             }
         }

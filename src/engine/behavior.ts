@@ -59,21 +59,28 @@ export class BehaviorEngine {
   }
 
   tick(deltaMs: number): void {
-    if (this.dragging) return;
-    if (this.dragSettleTimer > 0) {
-      this.dragSettleTimer = Math.max(0, this.dragSettleTimer - deltaMs);
-      if (this.dragSettleTimer === 0 && DIRECTIONAL_DRAG_STATES.includes(this._currentState)) {
-        this.transitionTo('idle');
+    try {
+      if (this.dragging) return;
+      if (this.dragSettleTimer > 0) {
+        this.dragSettleTimer = Math.max(0, this.dragSettleTimer - deltaMs);
+        if (this.dragSettleTimer === 0 && DIRECTIONAL_DRAG_STATES.includes(this._currentState)) {
+          this.transitionTo('idle');
+        }
+        return;
       }
-      return;
+      if (this._currentState !== 'idle') return;
+
+      this.idleTimer -= deltaMs;
+      if (this.idleTimer > 0) return;
+
+      this.tryRandomTransition();
+      this.resetIdleTimer();
+    } catch (err) {
+      console.error('[behavior] tick error, resetting to idle:', err);
+      this._currentState = 'idle';
+      this.dragging = false;
+      this.resetIdleTimer();
     }
-    if (this._currentState !== 'idle') return;
-
-    this.idleTimer -= deltaMs;
-    if (this.idleTimer > 0) return;
-
-    this.tryRandomTransition();
-    this.resetIdleTimer();
   }
 
   handleClick(): void {

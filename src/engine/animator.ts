@@ -104,7 +104,11 @@ export class Animator {
 
   private syncCell(): void {
     const spec = PET_ANIMATIONS[this.currentState];
-    const column = spec.usedColumns[this.currentFrameIndex] ?? spec.usedColumns[0] ?? 0;
+    // Clamp frameIndex within valid range to guard against out-of-bounds access
+    const maxIdx = spec.usedColumns.length - 1;
+    const safeIdx = Math.max(0, Math.min(this.currentFrameIndex, maxIdx));
+    this.currentFrameIndex = safeIdx;
+    const column = spec.usedColumns[safeIdx] ?? spec.usedColumns[0] ?? 0;
     this.currentCell = { row: spec.row, column };
     this.currentFrame = spec.row * 8 + column;
   }
