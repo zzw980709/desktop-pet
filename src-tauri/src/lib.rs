@@ -209,14 +209,18 @@ struct AddPetResult {
 }
 
 #[tauri::command]
-fn add_pet(app_handle: tauri::AppHandle) -> AddPetResult {
+async fn add_pet(app_handle: tauri::AppHandle) -> AddPetResult {
     info!("add_pet: opening file dialog");
-    let file_path = app_handle
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app_handle
         .dialog()
         .file()
         .add_filter("pet.json", &["json"])
         .set_title("选择 pet.json")
-        .blocking_pick_file();
+        .pick_file(move |file_path| {
+            let _ = tx.send(file_path);
+        });
+    let file_path = rx.await.unwrap_or(None);
 
     let Some(file_path) = file_path else {
         return AddPetResult {
