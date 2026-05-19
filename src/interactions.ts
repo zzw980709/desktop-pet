@@ -22,7 +22,6 @@ export class Interactions {
     this.canvas.addEventListener('mousedown', this.onMouseDown);
     window.addEventListener('mousemove', this.onMouseMove);
     window.addEventListener('mouseup', this.onMouseUp);
-    this.canvas.addEventListener('contextmenu', this.onContextMenu);
   }
 
   private onMouseDown = (e: MouseEvent): void => {
@@ -74,12 +73,5 @@ export class Interactions {
     } else {
       this.behavior.handleClick();
     }
-  };
-
-  private onContextMenu = (e: MouseEvent): void => {
-    e.preventDefault();
-    window.dispatchEvent(new CustomEvent('pet:contextmenu', {
-      detail: { x: e.clientX, y: e.clientY },
-    }));
   };
 }

@@ -7,7 +7,6 @@ import { Renderer } from './engine/renderer';
 import { Animator } from './engine/animator';
 import { BehaviorEngine } from './engine/behavior';
 import { Interactions } from './interactions';
-import { ContextMenu } from './ui/contextmenu';
 import { NativeAppMenu } from './ui/appmenu';
 import type { MenuAction } from './ui/menu-model';
 import { CELL_HEIGHT, CELL_WIDTH } from './pets/contract';
@@ -88,7 +87,6 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
 
   const behavior = new BehaviorEngine();
   const animator = new Animator();
-  const menu = new ContextMenu();
   const nativeMenu = new NativeAppMenu();
   const renderScale = getRenderScale(canvas);
   let renderer = new Renderer(canvas, renderScale);
@@ -116,7 +114,6 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
       label: pet.manifest.displayName,
       removable: pet.removable,
     }));
-    menu.setPets(menuPets, currentPetId);
     void nativeMenu.setPets(menuPets, currentPetId).catch((error: unknown) => {
       console.error('[app] failed to sync native app menu', error);
     });
@@ -137,7 +134,6 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
     pets = availablePets;
     renderer = new Renderer(canvas, renderScale);
     renderer.setCharacter(loadedPet);
-    menu.setPetSize(canvas.width, canvas.height);
     syncMenuPets(pets, activePet.id);
     animator.play(behavior.currentState);
 
@@ -233,7 +229,6 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
     }
   }
 
-  menu.on(handleMenuAction);
   nativeMenu.on(handleMenuAction);
 
   // Bongo keyboard event listener
@@ -248,15 +243,6 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
   });
 
   new Interactions(canvas, behavior);
-
-  window.addEventListener('pet:contextmenu', (() => {
-    void menu.show().catch((error: unknown) => {
-      console.error('[app] failed to show context menu', error);
-    });
-    void refreshPets().catch((error: unknown) => {
-      console.error('[app] failed to refresh pets', error);
-    });
-  }) as EventListener);
 
   window.addEventListener('mouseup', () => {
     if (behavior.isDragging) return;
