@@ -111,10 +111,9 @@ export class BehaviorEngine {
     this.dragSettleTimer = 0;
   }
 
-  handleDragMove(deltaX: number, deltaY: number): void {
+  handleDragMove(deltaX: number, _deltaY: number): void {
     if (!this.dragging) return;
     if (Math.abs(deltaX) < DRAG_DIRECTION_THRESHOLD_PX) return;
-    if (Math.abs(deltaX) < Math.abs(deltaY)) return;
 
     this.transitionTo(deltaX > 0 ? 'running-right' : 'running-left');
   }
