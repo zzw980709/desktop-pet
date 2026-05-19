@@ -248,15 +248,7 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
 
   window.addEventListener('mouseup', () => {
     if (behavior.isDragging) return;
-    setTimeout(async () => {
-      const win = getCurrentWindow();
-      const pos = await win.outerPosition().catch(() => null);
-      if (!pos) return;
-      const clamped = await clampToMonitor(pos.x, pos.y, canvas);
-      if (clamped.x !== pos.x || clamped.y !== pos.y) {
-        await win.setPosition(new LogicalPosition(clamped.x, clamped.y)).catch(() => {});
-        return;
-      }
+    setTimeout(() => {
       void savePrefs();
     }, 200);
   });
