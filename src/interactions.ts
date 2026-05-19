@@ -10,7 +10,7 @@ export class Interactions {
   private offsetY = 0;
   private accDeltaX = 0;
   private prevScreenX = 0;
-  private prevScreenY = 0;
+
   private dragMoved = false;
   private readonly dragThreshold = 5;
   private readonly directionThreshold = 8;
@@ -32,7 +32,6 @@ export class Interactions {
     this.offsetX = e.offsetX;
     this.offsetY = e.offsetY;
     this.prevScreenX = e.screenX;
-    this.prevScreenY = e.screenY;
     this.accDeltaX = 0;
     this.dragMoved = false;
   };
@@ -50,7 +49,6 @@ export class Interactions {
     if (this.dragMoved) {
       this.accDeltaX += e.screenX - this.prevScreenX;
       this.prevScreenX = e.screenX;
-      this.prevScreenY = e.screenY;
 
       if (Math.abs(this.accDeltaX) >= this.directionThreshold) {
         this.behavior.handleDragMove(this.accDeltaX);
