@@ -97,7 +97,8 @@ describe('BehaviorEngine', () => {
 
   it('tick triggers a fixed random transition from idle after timeout', () => {
     engine.tick(6000);
-    expect(engine.currentState).toBe('jumping');
+    // rng=0.5 -> Math.floor(0.5 * 6) = 3 -> 'running'
+    expect(engine.currentState).toBe('running');
   });
 
   it('tick does not trigger random idle transitions while dragging from idle', () => {
@@ -107,10 +108,12 @@ describe('BehaviorEngine', () => {
     expect(engine.isDragging).toBe(true);
   });
 
-  it('tick in non-idle state does nothing', () => {
+  it('tick in non-idle state returns to idle after max random action timeout', () => {
     engine.transitionTo('running-right');
-    engine.tick(10000);
+    engine.tick(3000);
     expect(engine.currentState).toBe('running-right');
+    engine.tick(1001);
+    expect(engine.currentState).toBe('idle');
   });
 
   it('off removes listener', () => {
@@ -139,8 +142,8 @@ describe('BehaviorEngine', () => {
 
   it('rng controls which transition is chosen', () => {
     engine.tick(6000);
-    // rng=0.5 -> Math.floor(0.5 * 5) = 2 -> picks 'jumping'
-    expect(engine.currentState).toBe('jumping');
+    // rng=0.5 -> Math.floor(0.5 * 6) = 3 -> picks 'running'
+    expect(engine.currentState).toBe('running');
   });
 
   it('non-looping states transition to idle on animationEnd', () => {

@@ -5,15 +5,17 @@ export type State = PetState;
 type StateChangeHandler = (newState: State, oldState: State) => void;
 
 const RESET_TO_IDLE_ON_END: State[] = ['waving', 'jumping', 'failed'];
-const RANDOM_IDLE_TRANSITIONS: State[] = ['running-right', 'running-left', 'jumping', 'running', 'review'];
+const RANDOM_IDLE_TRANSITIONS: State[] = ['running-right', 'running-left', 'jumping', 'running', 'waiting', 'review'];
 const DRAG_DIRECTION_THRESHOLD_PX = 12;
 const DRAG_SETTLE_MS = 180;
 const DIRECTIONAL_DRAG_STATES: State[] = ['running-right', 'running-left'];
+const MAX_RANDOM_ACTION_MS = 4000;
 
 export class BehaviorEngine {
   private _currentState: State = 'idle';
   private listeners: StateChangeHandler[] = [];
   private idleTimer = 0;
+  private stateElapsed = 0;
   private dragging = false;
   private dragSettleTimer = 0;
   private rng: () => number;
@@ -49,6 +51,7 @@ export class BehaviorEngine {
     const oldState = this._currentState;
     this._currentState = newState;
     this.dragSettleTimer = 0;
+    this.stateElapsed = 0;
     if (newState === 'idle') {
       this.dragging = false;
       this.resetIdleTimer();
@@ -68,7 +71,17 @@ export class BehaviorEngine {
         }
         return;
       }
-      if (this._currentState !== 'idle') return;
+
+      if (this._currentState !== 'idle') {
+        // Looping random actions eventually return to idle
+        if (!RESET_TO_IDLE_ON_END.includes(this._currentState)) {
+          this.stateElapsed += deltaMs;
+          if (this.stateElapsed >= MAX_RANDOM_ACTION_MS) {
+            this.transitionTo('idle');
+          }
+        }
+        return;
+      }
 
       this.idleTimer -= deltaMs;
       if (this.idleTimer > 0) return;

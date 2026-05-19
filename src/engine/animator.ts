@@ -10,15 +10,15 @@ type AnimationSpec = {
 };
 
 const PET_ANIMATIONS: Record<PetState, AnimationSpec> = {
-  idle: { row: 0, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [280, 110, 110, 140, 140, 320], loop: true },
-  'running-right': { row: 1, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [120, 120, 120, 120, 120, 120, 120, 220], loop: true },
-  'running-left': { row: 2, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [120, 120, 120, 120, 120, 120, 120, 220], loop: true },
-  waving: { row: 3, usedColumns: [0, 1, 2, 3], durationsMs: [140, 140, 140, 280], loop: false },
-  jumping: { row: 4, usedColumns: [0, 1, 2, 3, 4], durationsMs: [140, 140, 140, 140, 280], loop: false },
-  failed: { row: 5, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [140, 140, 140, 140, 140, 140, 140, 240], loop: false },
-  waiting: { row: 6, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [150, 150, 150, 150, 150, 260], loop: true },
-  running: { row: 7, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [120, 120, 120, 120, 120, 220], loop: true },
-  review: { row: 8, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [150, 150, 150, 150, 150, 280], loop: true },
+  idle: { row: 0, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [400, 180, 180, 220, 220, 480], loop: true },
+  'running-right': { row: 1, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [180, 180, 180, 180, 180, 180, 180, 320], loop: true },
+  'running-left': { row: 2, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [180, 180, 180, 180, 180, 180, 180, 320], loop: true },
+  waving: { row: 3, usedColumns: [0, 1, 2, 3], durationsMs: [200, 200, 200, 400], loop: false },
+  jumping: { row: 4, usedColumns: [0, 1, 2, 3, 4], durationsMs: [200, 200, 200, 200, 400], loop: false },
+  failed: { row: 5, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [200, 200, 200, 200, 200, 200, 200, 340], loop: false },
+  waiting: { row: 6, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [220, 220, 220, 220, 220, 380], loop: true },
+  running: { row: 7, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [180, 180, 180, 180, 180, 320], loop: true },
+  review: { row: 8, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [220, 220, 220, 220, 220, 400], loop: true },
 };
 
 type TransitionState = {
@@ -81,7 +81,7 @@ export class Animator {
 
     this.elapsed += deltaMs;
 
-    while (this.elapsed >= spec.durationsMs[this.currentFrameIndex]) {
+    while (this.elapsed + 0.5 >= spec.durationsMs[this.currentFrameIndex]) {
       this.elapsed -= spec.durationsMs[this.currentFrameIndex];
       const lastFrame = this.currentFrameIndex === spec.usedColumns.length - 1;
 
