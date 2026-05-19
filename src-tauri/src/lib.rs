@@ -9,6 +9,7 @@ use tracing_appender::rolling::RollingFileAppender;
 use bongo::BongoMonitor;
 mod bongo;
 mod pets;
+mod cc_hooks;
 
 const BUILTIN_PET_ID: &str = "cat";
 const BUILTIN_MANIFEST: &str = include_str!("../resources/cat/pet.json");
