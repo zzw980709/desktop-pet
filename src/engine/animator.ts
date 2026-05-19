@@ -10,15 +10,23 @@ type AnimationSpec = {
 };
 
 const PET_ANIMATIONS: Record<PetState, AnimationSpec> = {
-  idle: { row: 0, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [400, 180, 180, 220, 220, 480], loop: true },
-  'running-right': { row: 1, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [180, 180, 180, 180, 180, 180, 180, 320], loop: true },
-  'running-left': { row: 2, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [180, 180, 180, 180, 180, 180, 180, 320], loop: true },
-  waving: { row: 3, usedColumns: [0, 1, 2, 3], durationsMs: [200, 200, 200, 400], loop: false },
-  jumping: { row: 4, usedColumns: [0, 1, 2, 3, 4], durationsMs: [200, 200, 200, 200, 400], loop: false },
-  failed: { row: 5, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [200, 200, 200, 200, 200, 200, 200, 340], loop: false },
-  waiting: { row: 6, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [220, 220, 220, 220, 220, 380], loop: true },
-  running: { row: 7, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [180, 180, 180, 180, 180, 320], loop: true },
-  review: { row: 8, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [220, 220, 220, 220, 220, 400], loop: true },
+  // Breathing cycle: slow inhale → hold → gentle exhale → hold
+  idle: { row: 0, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [500, 220, 280, 220, 280, 500], loop: true },
+  // Directional walk: even alternating steps, planted foot holds longer
+  'running-right': { row: 1, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [220, 180, 220, 180, 220, 180, 220, 360], loop: true },
+  'running-left': { row: 2, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [220, 180, 220, 180, 220, 180, 220, 360], loop: true },
+  // Wave: raise arm → quick wave at peak → return
+  waving: { row: 3, usedColumns: [0, 1, 2, 3], durationsMs: [250, 180, 400, 250], loop: false },
+  // Jump: crouch → launch → float at peak → fall → land
+  jumping: { row: 4, usedColumns: [0, 1, 2, 3, 4], durationsMs: [240, 160, 450, 180, 280], loop: false },
+  // Stumble: slip → stumble → try to recover → fall → dramatic pause
+  failed: { row: 5, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [180, 160, 160, 200, 220, 280, 350, 600], loop: false },
+  // Impatient fidget: look around, slight tap, look again
+  waiting: { row: 6, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [350, 220, 220, 220, 220, 400], loop: true },
+  // Quick run: faster cycle than walk
+  running: { row: 7, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [160, 140, 160, 140, 160, 300], loop: true },
+  // Thoughtful review: slow look → ponder → slow look away
+  review: { row: 8, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [400, 280, 450, 280, 220, 400], loop: true },
 };
 
 type TransitionState = {
