@@ -258,4 +258,48 @@ describe('BehaviorEngine', () => {
       expect(typeof disp.dx).toBe('number');
     });
   });
+
+  // CC hook event tests
+  describe('cc hook events', () => {
+    it('thinking event transitions to review', () => {
+      engine.forceState('review');
+      expect(engine.currentState).toBe('review');
+    });
+
+    it('tool-calling event transitions to running', () => {
+      engine.forceState('running');
+      expect(engine.currentState).toBe('running');
+    });
+
+    it('waiting event transitions to waiting', () => {
+      engine.forceState('waiting');
+      expect(engine.currentState).toBe('waiting');
+    });
+
+    it('context-compacted event transitions to failed', () => {
+      engine.forceState('failed');
+      expect(engine.currentState).toBe('failed');
+    });
+
+    it('completion event transitions to waving', () => {
+      engine.forceState('waving');
+      expect(engine.currentState).toBe('waving');
+    });
+
+    it('cc event states reset to idle on animation end', () => {
+      const states = ['waving', 'failed'] as const;
+      for (const state of states) {
+        const e = new BehaviorEngine(() => 0.5);
+        e.forceState(state);
+        e.handleAnimationEnd();
+        expect(e.currentState).toBe('idle');
+      }
+    });
+
+    it('cc event overrides current state via forceState', () => {
+      engine.handleDragStart();
+      engine.forceState('review');
+      expect(engine.currentState).toBe('review');
+    });
+  });
 });
