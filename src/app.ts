@@ -21,6 +21,31 @@ function getRenderScale(canvas: HTMLCanvasElement): number {
   return Math.min(widthScale, heightScale) || 1;
 }
 
+function getWindowSize(canvas: HTMLCanvasElement) {
+  const s = getRenderScale(canvas);
+  return { w: 64 * s, h: 64 * s };
+}
+
+async function clampToMonitor(x: number, y: number, canvas: HTMLCanvasElement): Promise<{ x: number; y: number }> {
+  try {
+    const monitor = await currentMonitor().catch(() => null);
+    if (monitor) {
+      const { w, h } = getWindowSize(canvas);
+      const scale = monitor.scaleFactor;
+      const maxX = Math.max(0, (monitor.size.width / scale) - w);
+      const maxY = Math.max(0, (monitor.size.height / scale) - h);
+      return {
+        x: Math.max(0, Math.min(x, maxX)),
+        y: Math.max(0, Math.min(y, maxY)),
+      };
+    }
+  } catch {
+    // fall through to fallback
+  }
+  // Fallback: always keep position on-screen
+  return { x: Math.max(0, x), y: Math.max(0, y) };
+}
+
 interface AddPetResult {
   success: boolean;
   petId?: string;
@@ -36,27 +61,17 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
   const prefs = await invoke<Preferences>('load_preferences');
 
   if (prefs.windowPosition) {
-    try {
-      const winWidth = 64 * getRenderScale(canvas);
-      const winHeight = 64 * getRenderScale(canvas);
-      let { x, y } = prefs.windowPosition;
-
-      // Clamp to current monitor bounds (accounting for Retina scale)
-      const monitor = await currentMonitor().catch(() => null);
-      if (monitor) {
-        const scale = monitor.scaleFactor;
-        const maxX = Math.max(0, (monitor.size.width / scale) - winWidth);
-        const maxY = Math.max(0, (monitor.size.height / scale) - winHeight);
-        x = Math.max(-32, Math.min(x, maxX));
-        y = Math.max(0, Math.min(y, maxY));
-      }
-
-      await getCurrentWindow().setPosition(
-        new LogicalPosition(x, y),
-      );
-    } catch {
-      // window position restore is best-effort
+    const clamped = await clampToMonitor(
+      prefs.windowPosition.x,
+      prefs.windowPosition.y,
+      canvas,
+    );
+    if (clamped.x !== prefs.windowPosition.x || clamped.y !== prefs.windowPosition.y) {
+      console.warn(`[app] clamped off-screen position from (${prefs.windowPosition.x},${prefs.windowPosition.y}) to (${clamped.x},${clamped.y})`);
     }
+    await getCurrentWindow().setPosition(
+      new LogicalPosition(clamped.x, clamped.y),
+    ).catch(() => {});
   }
 
   let pets = await discoverPets();
@@ -82,10 +97,11 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
   async function savePrefs(): Promise<void> {
     try {
       const pos = await getCurrentWindow().outerPosition();
+      const clamped = await clampToMonitor(pos.x, pos.y, canvas);
       await invoke('save_preferences', {
         preferences: {
           activePetId: activePet.id,
-          windowPosition: { x: pos.x, y: pos.y },
+          windowPosition: { x: clamped.x, y: clamped.y },
         },
       });
     } catch (err) {
@@ -232,7 +248,15 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
 
   window.addEventListener('mouseup', () => {
     if (behavior.isDragging) return;
-    setTimeout(() => {
+    setTimeout(async () => {
+      const win = getCurrentWindow();
+      const pos = await win.outerPosition().catch(() => null);
+      if (!pos) return;
+      const clamped = await clampToMonitor(pos.x, pos.y, canvas);
+      if (clamped.x !== pos.x || clamped.y !== pos.y) {
+        await win.setPosition(new LogicalPosition(clamped.x, clamped.y)).catch(() => {});
+        return;
+      }
       void savePrefs();
     }, 200);
   });
