@@ -6,6 +6,8 @@ use tracing::{error, info, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use tracing_appender::rolling::RollingFileAppender;
 
+use bongo::BongoMonitor;
+mod bongo;
 mod pets;
 
 const BUILTIN_PET_ID: &str = "cat";
@@ -100,6 +102,13 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     init_builtin_pet(&app_data);
     init_preferences(&app_data);
+
+    // Initialize bongo keyboard monitor (always on)
+    let bongo_monitor = BongoMonitor::new(app.handle().clone());
+    if let Err(e) = bongo_monitor.set_active(true) {
+        info!("bongo monitor not available (permissions): {}", e);
+    }
+    app.manage(bongo_monitor);
 
     info!("application setup complete");
     Ok(())
@@ -317,14 +326,21 @@ async fn add_pet(app_handle: tauri::AppHandle) -> AddPetResult {
     match fs::read(&spritesheet_path) {
         Ok(data) => {
             match pets::read_webp_dimensions(&data) {
-                Some((w, h)) if w == pets::EXPECTED_SPRITESHEET_W && h == pets::EXPECTED_SPRITESHEET_H => {}
+                Some((w, h))
+                    if w == pets::EXPECTED_SPRITESHEET_W
+                        && h >= pets::EXPECTED_SPRITESHEET_MIN_H
+                        && h % pets::CELL_H == 0 => {}
                 Some((w, h)) => {
                     return AddPetResult {
                         success: false,
                         pet_id: None,
                         error: Some(format!(
-                            "精灵表尺寸不符：期望 {}x{}，实际 {}x{}",
-                            pets::EXPECTED_SPRITESHEET_W, pets::EXPECTED_SPRITESHEET_H, w, h
+                            "精灵表尺寸不符：宽度须 {}px，高度须为 {}px 的整倍数（最低 {}px），实际 {}x{}",
+                            pets::EXPECTED_SPRITESHEET_W,
+                            pets::CELL_H,
+                            pets::EXPECTED_SPRITESHEET_MIN_H,
+                            w,
+                            h
                         )),
                     };
                 }
@@ -446,6 +462,18 @@ fn remove_pet(app_handle: tauri::AppHandle, pet_id: String) -> RemovePetResult {
     }
 }
 
+#[tauri::command]
+fn set_bongo_active(monitor: tauri::State<'_, BongoMonitor>, active: bool) -> Result<(), String> {
+    monitor.set_active(active)
+}
+
+#[tauri::command]
+fn open_accessibility_settings() {
+    let _ = std::process::Command::new("open")
+        .args(["x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"])
+        .spawn();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -457,7 +485,9 @@ pub fn run() {
             load_preferences,
             save_preferences,
             add_pet,
-            remove_pet
+            remove_pet,
+            set_bongo_active,
+            open_accessibility_settings
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -5,7 +5,8 @@ export { validatePetManifest };
 
 export function validatePetSpritesheet(img: HTMLImageElement): boolean {
   return img.naturalWidth === CELL_WIDTH * ATLAS_COLUMNS
-    && img.naturalHeight === CELL_HEIGHT * ATLAS_ROWS;
+    && img.naturalHeight >= CELL_HEIGHT * 9
+    && img.naturalHeight % CELL_HEIGHT === 0;
 }
 
 function createPlaceholderImage(): HTMLImageElement {

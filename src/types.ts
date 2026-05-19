@@ -7,7 +7,9 @@ export type PetState =
   | 'failed'
   | 'waiting'
   | 'running'
-  | 'review';
+  | 'review'
+  | 'bongo-left'
+  | 'bongo-right';
 
 export interface PetManifest {
   id: string;

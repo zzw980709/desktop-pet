@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window';
 import { LogicalPosition } from '@tauri-apps/api/dpi';
 import { loadPet } from './engine/loader';
@@ -234,6 +235,17 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
 
   menu.on(handleMenuAction);
   nativeMenu.on(handleMenuAction);
+
+  // Bongo keyboard event listener
+  void await listen<{ side: string }>('bongo-tap', (event) => {
+    try {
+      const bongoState = event.payload.side === 'Left' ? 'bongo-left' : 'bongo-right';
+      behavior.handleBongoTap(event.payload.side === 'Left' ? 'left' : 'right');
+      animator.play(bongoState);
+    } catch (err) {
+      console.error('[app] bongo tap error:', err);
+    }
+  });
 
   new Interactions(canvas, behavior);
 

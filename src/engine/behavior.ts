@@ -4,7 +4,7 @@ export type State = PetState;
 
 type StateChangeHandler = (newState: State, oldState: State) => void;
 
-const RESET_TO_IDLE_ON_END: State[] = ['waving', 'jumping', 'failed'];
+const RESET_TO_IDLE_ON_END: State[] = ['waving', 'jumping', 'failed', 'bongo-left', 'bongo-right'];
 const RANDOM_IDLE_TRANSITIONS: State[] = ['running-right', 'running-left', 'jumping', 'running', 'waiting', 'review'];
 const DRAG_SETTLE_MS = 180;
 const DIRECTIONAL_DRAG_STATES: State[] = ['running-right', 'running-left'];
@@ -122,6 +122,11 @@ export class BehaviorEngine {
       return;
     }
     this.transitionTo('idle');
+  }
+
+  handleBongoTap(side: 'left' | 'right'): void {
+    if (this.dragging) return;
+    this.transitionTo(side === 'left' ? 'bongo-left' : 'bongo-right');
   }
 
   handleAnimationEnd(): void {

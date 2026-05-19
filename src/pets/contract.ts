@@ -3,7 +3,7 @@ import type { PetManifest } from '../types';
 export const CELL_WIDTH = 192;
 export const CELL_HEIGHT = 208;
 export const ATLAS_COLUMNS = 8;
-export const ATLAS_ROWS = 9;
+export const ATLAS_ROWS = 11;
 export const SPRITESHEET_PATH = 'spritesheet.webp';
 
 export interface FrameRect {
