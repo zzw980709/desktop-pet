@@ -296,6 +296,26 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
     }
   }
 
+  // Initialize roaming with screen bounds
+  let screenW = 1920;
+  let screenH = 1080;
+  let cachedRoamX = 0;
+  let cachedRoamY = 0;
+  const initPos = await getCurrentWindow().outerPosition().catch(() => null);
+  if (initPos) {
+    cachedRoamX = initPos.x;
+    cachedRoamY = initPos.y;
+  }
+  const mon = await currentMonitor().catch(() => null);
+  if (mon) {
+    const scale = mon.scaleFactor;
+    screenW = mon.size.width / scale;
+    screenH = mon.size.height / scale;
+  }
+  behavior.setScreenBounds(screenW, screenH);
+  behavior.setCurrentPosition(cachedRoamX, cachedRoamY);
+  behavior.startRoaming();
+
   let heartAlpha = 0;
   const HEART_DURATION = 600;
   let heartTimer = 0;
@@ -384,7 +404,37 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
       const deltaMs = currentTime - lastTime;
       lastTime = currentTime;
 
+      // Feed current position before tick so behavior can compute target
+      if (behavior.roamingActive) {
+        behavior.setCurrentPosition(cachedRoamX, cachedRoamY);
+      }
+
       behavior.tick(deltaMs);
+
+      // Apply roaming displacement after tick
+      if (behavior.roamingActive) {
+        const disp = behavior.roamingDisplacement;
+        if (disp.dx !== 0 || disp.dy !== 0) {
+          cachedRoamX += disp.dx;
+          cachedRoamY += disp.dy;
+
+          // Simple clamp to screen bounds
+          const { w } = getWindowSize(canvas);
+          cachedRoamX = Math.max(0, Math.min(cachedRoamX, screenW - w));
+          cachedRoamY = Math.max(0, Math.min(cachedRoamY, screenH));
+
+          // Edge detection
+          if (cachedRoamX <= 20) {
+            behavior.redirectFromEdge('left');
+          } else if (cachedRoamX + w >= screenW - 20) {
+            behavior.redirectFromEdge('right');
+          }
+
+          getCurrentWindow().setPosition(
+            new LogicalPosition(cachedRoamX, cachedRoamY),
+          ).catch(() => {});
+        }
+      }
 
       const shouldAnimateWhileDragging =
         behavior.isDragging && DRAG_ANIMATED_STATES.has(behavior.currentState);
