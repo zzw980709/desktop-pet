@@ -10,6 +10,25 @@ const DRAG_SETTLE_MS = 180;
 const DIRECTIONAL_DRAG_STATES: State[] = ['running-right', 'running-left'];
 const MAX_RANDOM_ACTION_MS = 4000;
 
+interface RoamingState {
+  active: boolean;
+  suspended: boolean;
+  mode: 'paused' | 'wandering' | 'acting';
+  targetX: number;
+  targetY: number;
+  speed: number;
+  pauseTimer: number;
+  direction: 'left' | 'right';
+}
+
+const EDGE_MARGIN = 40;
+const WANDER_SPEED_MIN = 60;
+const WANDER_SPEED_MAX = 120;
+const PAUSE_MIN_MS = 2000;
+const PAUSE_MAX_MS = 8000;
+const ACT_PROBABILITY = 0.1;
+const ACT_OPTIONS: State[] = ['jumping', 'waiting', 'review'];
+
 export class BehaviorEngine {
   private _currentState: State = 'idle';
   private listeners: StateChangeHandler[] = [];
@@ -18,10 +37,90 @@ export class BehaviorEngine {
   private dragging = false;
   private dragSettleTimer = 0;
   private rng: () => number;
+  private roaming: RoamingState = {
+    active: false,
+    suspended: false,
+    mode: 'paused',
+    targetX: 0,
+    targetY: 0,
+    speed: 60,
+    pauseTimer: 0,
+    direction: 'right',
+  };
+  private screenW = 1920;
+  private screenH = 1080;
+  private currentPosX = 0;
+  private _roamingDisplacement = { dx: 0, dy: 0 };
 
   constructor(rng?: () => number) {
     this.rng = rng ?? Math.random;
     this.resetIdleTimer();
+  }
+
+  get roamingActive(): boolean {
+    return this.roaming.active;
+  }
+
+  get roamingDisplacement(): { dx: number; dy: number } {
+    return this._roamingDisplacement;
+  }
+
+  setScreenBounds(w: number, h: number): void {
+    this.screenW = w;
+    this.screenH = h;
+  }
+
+  setCurrentPosition(x: number, _y: number): void {
+    this.currentPosX = x;
+  }
+
+  startRoaming(): void {
+    this.roaming.active = true;
+    this.roaming.mode = 'paused';
+    this.roaming.suspended = false;
+    this.roaming.pauseTimer = PAUSE_MIN_MS + this.rng() * (PAUSE_MAX_MS - PAUSE_MIN_MS);
+    this._roamingDisplacement = { dx: 0, dy: 0 };
+    this.transitionTo('idle');
+  }
+
+  suspendRoaming(): void {
+    this.roaming.suspended = true;
+    this._roamingDisplacement = { dx: 0, dy: 0 };
+  }
+
+  resumeRoaming(): void {
+    this.roaming.suspended = false;
+    this.roaming.mode = 'paused';
+    this.roaming.pauseTimer = PAUSE_MIN_MS + this.rng() * (PAUSE_MAX_MS - PAUSE_MIN_MS);
+    this.transitionTo('idle');
+  }
+
+  notifyArrived(): void {
+    if (this.roaming.mode !== 'wandering') return;
+    if (this.rng() < ACT_PROBABILITY) {
+      this.roaming.mode = 'acting';
+      const act = ACT_OPTIONS[Math.floor(this.rng() * ACT_OPTIONS.length)] ?? 'jumping';
+      this.transitionTo(act);
+    } else {
+      this.roaming.mode = 'paused';
+      this.roaming.pauseTimer = PAUSE_MIN_MS + this.rng() * (PAUSE_MAX_MS - PAUSE_MIN_MS);
+      this.transitionTo('idle');
+    }
+    this._roamingDisplacement = { dx: 0, dy: 0 };
+  }
+
+  redirectFromEdge(edge: 'left' | 'right'): void {
+    if (this.roaming.mode !== 'wandering') return;
+    switch (edge) {
+      case 'left':
+        this.roaming.targetX = EDGE_MARGIN + this.rng() * (this.screenW * 0.5);
+        break;
+      case 'right':
+        this.roaming.targetX = this.screenW * 0.5 + this.rng() * (this.screenW * 0.5 - EDGE_MARGIN);
+        break;
+    }
+    this.roaming.direction = this.roaming.targetX > (this.screenW / 2) ? 'right' : 'left';
+    this.transitionTo(this.roaming.direction === 'right' ? 'running-right' : 'running-left');
   }
 
   get currentState(): State {
@@ -71,8 +170,12 @@ export class BehaviorEngine {
         return;
       }
 
+      if (this.roaming.active) {
+        this.tickRoaming(deltaMs);
+        return;
+      }
+
       if (this._currentState !== 'idle') {
-        // Looping random actions eventually return to idle
         if (!RESET_TO_IDLE_ON_END.includes(this._currentState)) {
           this.stateElapsed += deltaMs;
           if (this.stateElapsed >= MAX_RANDOM_ACTION_MS) {
@@ -93,6 +196,53 @@ export class BehaviorEngine {
       this.dragging = false;
       this.resetIdleTimer();
     }
+  }
+
+  private tickRoaming(deltaMs: number): void {
+    this._roamingDisplacement = { dx: 0, dy: 0 };
+
+    if (this.roaming.suspended) {
+      if (this.roaming.mode === 'paused') {
+        this.roaming.pauseTimer -= deltaMs;
+      }
+      return;
+    }
+
+    switch (this.roaming.mode) {
+      case 'paused':
+        this.roaming.pauseTimer -= deltaMs;
+        if (this.roaming.pauseTimer <= 0) {
+          const overflow = -this.roaming.pauseTimer;
+          this.pickRandomTarget();
+          this.roaming.mode = 'wandering';
+          this.roaming.speed = WANDER_SPEED_MIN + this.rng() * (WANDER_SPEED_MAX - WANDER_SPEED_MIN);
+          this.roaming.direction = this.roaming.targetX > this.currentPosX ? 'right' : 'left';
+          this.transitionTo(this.roaming.direction === 'right' ? 'running-right' : 'running-left');
+          const dx = (this.roaming.direction === 'right' ? 1 : -1) * this.roaming.speed * (overflow / 1000);
+          this._roamingDisplacement = { dx: Math.max(-5, Math.min(5, dx)), dy: 0 };
+        }
+        break;
+
+      case 'wandering': {
+        const dx = (this.roaming.direction === 'right' ? 1 : -1) * this.roaming.speed * (deltaMs / 1000);
+        this._roamingDisplacement = { dx: Math.max(-5, Math.min(5, dx)), dy: 0 };
+
+        const estimatedX = this.currentPosX + this._roamingDisplacement.dx;
+        if ((this.roaming.direction === 'right' && estimatedX >= this.roaming.targetX) ||
+            (this.roaming.direction === 'left' && estimatedX <= this.roaming.targetX)) {
+          this.notifyArrived();
+        }
+        break;
+      }
+
+      case 'acting':
+        break;
+    }
+  }
+
+  private pickRandomTarget(): void {
+    this.roaming.targetX = EDGE_MARGIN + this.rng() * (this.screenW - 2 * EDGE_MARGIN);
+    this.roaming.targetY = EDGE_MARGIN + this.rng() * (this.screenH - 2 * EDGE_MARGIN);
   }
 
   handleClick(): void {
@@ -131,6 +281,12 @@ export class BehaviorEngine {
 
   handleAnimationEnd(): void {
     if (this.dragging) return;
+    if (this.roaming.active && this.roaming.mode === 'acting') {
+      this.roaming.mode = 'paused';
+      this.roaming.pauseTimer = PAUSE_MIN_MS + this.rng() * (PAUSE_MAX_MS - PAUSE_MIN_MS);
+      this.transitionTo('idle');
+      return;
+    }
     if (RESET_TO_IDLE_ON_END.includes(this._currentState)) {
       this.transitionTo('idle');
     }

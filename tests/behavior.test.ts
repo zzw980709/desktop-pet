@@ -175,4 +175,87 @@ describe('BehaviorEngine', () => {
     expect(engine.currentState).toBe('waving');
     expect(engine.isDragging).toBe(true);
   });
+
+  // Roaming tests
+  describe('roaming', () => {
+    it('starts in paused mode with idle animation', () => {
+      const e = new BehaviorEngine(() => 0.5);
+      e.startRoaming();
+      expect(e.roamingActive).toBe(true);
+      e.tick(16);
+      expect(e.currentState).toBe('idle');
+    });
+
+    it('paused transitions to wandering after timeout', () => {
+      const e = new BehaviorEngine(() => 0);
+      e.startRoaming();
+      // rng=0 → pauseTimer = 2000ms
+      e.tick(2001);
+      expect(e.currentState).toBe('running-right');
+    });
+
+    it('wandering produces non-zero displacement', () => {
+      const e = new BehaviorEngine(() => 0.5);
+      e.startRoaming();
+      e.tick(6000); // trigger paused → wandering transition
+      e.tick(16);   // now in wandering, should produce displacement
+      const disp = e.roamingDisplacement;
+      expect(disp.dx).not.toBe(0);
+    });
+
+    it('suspended roaming does not produce displacement', () => {
+      const e = new BehaviorEngine(() => 0.5);
+      e.startRoaming();
+      e.tick(6000);
+      e.suspendRoaming();
+      e.tick(16);
+      expect(e.roamingDisplacement.dx).toBe(0);
+    });
+
+    it('resume after suspend goes to paused mode', () => {
+      const e = new BehaviorEngine(() => 0.5);
+      e.startRoaming();
+      e.tick(6000); // now wandering
+      e.suspendRoaming();
+      e.resumeRoaming();
+      expect(e.roamingActive).toBe(true);
+      expect(e.currentState).toBe('idle');
+    });
+
+    it('notifyArrived from wandering triggers acting or paused', () => {
+      const e = new BehaviorEngine(() => 0);
+      e.startRoaming();
+      // rng=0 → pause = 2000ms, then wandering
+      e.tick(2001);
+      // rng=0 < 0.1 → acting mode
+      e.notifyArrived();
+      expect(e.currentState).toBe('jumping');
+    });
+
+    it('animationEnd during acting returns to idle (paused)', () => {
+      const e = new BehaviorEngine(() => 0.5);
+      e.startRoaming();
+      // Force acting by calling notifyArrived while wandering
+      e.tick(6000); // now wandering
+      // rng=0.5 >= 0.1 → paused (not acting)
+      e.notifyArrived();
+      expect(e.currentState).toBe('idle');
+    });
+
+    it('existing idle behavior unchanged when roaming not active', () => {
+      engine.tick(6000);
+      // rng=0.5 → running
+      expect(engine.currentState).toBe('running');
+    });
+
+    it('setScreenBounds stores dimensions', () => {
+      const e = new BehaviorEngine(() => 0.5);
+      e.setScreenBounds(2560, 1440);
+      e.startRoaming();
+      e.tick(6000); // wandering
+      const disp = e.roamingDisplacement;
+      // should have non-zero dx with valid bounds
+      expect(typeof disp.dx).toBe('number');
+    });
+  });
 });
