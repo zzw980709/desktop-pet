@@ -8,6 +8,8 @@ export class Interactions {
   private startY = 0;
   private offsetX = 0;
   private offsetY = 0;
+  private prevScreenX = 0;
+  private prevScreenY = 0;
   private dragMoved = false;
   private readonly dragThreshold = 5;
 
@@ -27,23 +29,27 @@ export class Interactions {
     this.startY = e.screenY;
     this.offsetX = e.offsetX;
     this.offsetY = e.offsetY;
+    this.prevScreenX = e.screenX;
+    this.prevScreenY = e.screenY;
     this.dragMoved = false;
   };
 
   private onMouseMove = async (e: MouseEvent): Promise<void> => {
     if (!this.isDragging) return;
-    const deltaX = e.screenX - this.startX;
-    const deltaY = e.screenY - this.startY;
-    const dx = Math.abs(deltaX);
-    const dy = Math.abs(deltaY);
+    const totalDeltaX = e.screenX - this.startX;
+    const totalDeltaY = e.screenY - this.startY;
 
-    if (!this.dragMoved && (dx > this.dragThreshold || dy > this.dragThreshold)) {
+    if (!this.dragMoved && (Math.abs(totalDeltaX) > this.dragThreshold || Math.abs(totalDeltaY) > this.dragThreshold)) {
       this.dragMoved = true;
       this.behavior.handleDragStart();
     }
 
     if (this.dragMoved) {
-      this.behavior.handleDragMove(deltaX, deltaY);
+      const frameDeltaX = e.screenX - this.prevScreenX;
+      const frameDeltaY = e.screenY - this.prevScreenY;
+      this.prevScreenX = e.screenX;
+      this.prevScreenY = e.screenY;
+      this.behavior.handleDragMove(frameDeltaX, frameDeltaY);
       try {
         await getCurrentWindow().setPosition(
           new LogicalPosition(e.screenX - this.offsetX, e.screenY - this.offsetY),
