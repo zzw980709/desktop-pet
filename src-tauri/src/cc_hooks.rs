@@ -79,7 +79,7 @@ fn handle_connection(mut stream: TcpStream, app_handle: tauri::AppHandle) {
         return;
     }
 
-    if !request_line.starts_with("POST ") {
+    if !request_line.starts_with("POST /event ") {
         return;
     }
 
