@@ -441,6 +441,222 @@ fn remove_pet(app_handle: tauri::AppHandle, pet_id: String) -> RemovePetResult {
     }
 }
 
+const CC_HOOK_PORT: u16 = 18920;
+
+fn cc_hooks_dir() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .join(".claude")
+        .join("hooks")
+        .join("desktop-pet")
+}
+
+fn cc_settings_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .join(".claude")
+        .join("settings.json")
+}
+
+fn cc_settings_backup_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .join(".claude")
+        .join("settings.json.desktop-pet.bak")
+}
+
+const NOTIFY_SCRIPT: &str = r#"#!/bin/bash
+curl -s -X POST "http://127.0.0.1:PORT/event" \
+  -H "Content-Type: application/json" \
+  -d "{\"event\":\"$1\"}"
+"#;
+
+const HOOK_EVENTS: &[(&str, &str)] = &[
+    ("after-model-request", "thinking"),
+    ("after-tool-invoke", "tool-calling"),
+    ("before-permission-request", "waiting"),
+    ("after-compaction", "context-compacted"),
+    ("after-session-finish", "completion"),
+];
+
+#[derive(Debug, Serialize, Deserialize)]
+struct CcHookResult {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+#[tauri::command]
+fn install_cc_hooks() -> CcHookResult {
+    info!("install_cc_hooks: installing hook configuration");
+
+    let settings_path = cc_settings_path();
+
+    // Backup existing settings
+    if settings_path.exists() {
+        match fs::copy(&settings_path, cc_settings_backup_path()) {
+            Ok(_) => info!("backed up settings.json"),
+            Err(e) => {
+                error!("failed to backup settings.json: {}", e);
+                return CcHookResult {
+                    success: false,
+                    error: Some(format!("无法备份 settings.json: {}", e)),
+                };
+            }
+        }
+    }
+
+    // Read existing settings or start fresh
+    let mut settings: serde_json::Value = if settings_path.exists() {
+        match fs::read_to_string(&settings_path) {
+            Ok(content) => match serde_json::from_str(&content) {
+                Ok(v) => v,
+                Err(e) => {
+                    error!("failed to parse settings.json: {}", e);
+                    return CcHookResult {
+                        success: false,
+                        error: Some(format!("settings.json 格式错误: {}", e)),
+                    };
+                }
+            },
+            Err(e) => {
+                error!("failed to read settings.json: {}", e);
+                return CcHookResult {
+                    success: false,
+                    error: Some(format!("无法读取 settings.json: {}", e)),
+                };
+            }
+        }
+    } else {
+        serde_json::json!({})
+    };
+
+    // Write hook config
+    let hooks = settings
+        .as_object_mut()
+        .and_then(|obj| {
+            Some(
+                obj.entry("hooks")
+                    .or_insert_with(|| serde_json::json!({})),
+            )
+        })
+        .and_then(|v| v.as_object_mut());
+
+    let Some(hooks_obj) = hooks else {
+        return CcHookResult {
+            success: false,
+            error: Some("无法解析 settings.json hooks 字段".into()),
+        };
+    };
+
+    for (hook_event, pet_event) in HOOK_EVENTS {
+        let command = format!(
+            "{}/notify.sh {}",
+            cc_hooks_dir().display(),
+            pet_event
+        );
+        let entry = serde_json::json!([{
+            "command": command,
+        }]);
+        hooks_obj.insert(hook_event.to_string(), entry);
+    }
+
+    // Write updated settings
+    let content = serde_json::to_string_pretty(&settings).unwrap_or_default();
+    if let Err(e) = fs::write(&settings_path, &content) {
+        error!("failed to write settings.json: {}", e);
+        return CcHookResult {
+            success: false,
+            error: Some(format!("无法写入 settings.json: {}", e)),
+        };
+    }
+
+    // Write notify.sh script
+    let hooks_dir = cc_hooks_dir();
+    if let Err(e) = fs::create_dir_all(&hooks_dir) {
+        error!("failed to create hooks dir: {}", e);
+        return CcHookResult {
+            success: false,
+            error: Some(format!("无法创建 hook 目录: {}", e)),
+        };
+    }
+
+    let notify_script = NOTIFY_SCRIPT.replace("PORT", &CC_HOOK_PORT.to_string());
+    if let Err(e) = fs::write(hooks_dir.join("notify.sh"), &notify_script) {
+        error!("failed to write notify.sh: {}", e);
+        return CcHookResult {
+            success: false,
+            error: Some(format!("无法写入 notify.sh: {}", e)),
+        };
+    }
+
+    // Make executable
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(
+            hooks_dir.join("notify.sh"),
+            std::fs::Permissions::from_mode(0o755),
+        );
+    }
+
+    info!("install_cc_hooks: successfully installed");
+    CcHookResult {
+        success: true,
+        error: None,
+    }
+}
+
+#[tauri::command]
+fn uninstall_cc_hooks() -> CcHookResult {
+    info!("uninstall_cc_hooks: removing hook configuration");
+
+    let backup_path = cc_settings_backup_path();
+    let settings_path = cc_settings_path();
+
+    if backup_path.exists() {
+        match fs::copy(&backup_path, &settings_path) {
+            Ok(_) => {
+                info!("restored settings.json from backup");
+                let _ = fs::remove_file(&backup_path);
+            }
+            Err(e) => {
+                error!("failed to restore settings.json: {}", e);
+                return CcHookResult {
+                    success: false,
+                    error: Some(format!("无法恢复 settings.json: {}", e)),
+                };
+            }
+        }
+    } else {
+        warn!("no backup found, removing hooks from settings.json");
+        if settings_path.exists() {
+            if let Ok(content) = fs::read_to_string(&settings_path) {
+                if let Ok(mut settings) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(obj) = settings.as_object_mut() {
+                        obj.remove("hooks");
+                    }
+                    let new_content =
+                        serde_json::to_string_pretty(&settings).unwrap_or_default();
+                    let _ = fs::write(&settings_path, new_content);
+                }
+            }
+        }
+    }
+
+    // Remove hook scripts directory
+    let hooks_dir = cc_hooks_dir();
+    if hooks_dir.exists() {
+        let _ = fs::remove_dir_all(&hooks_dir);
+    }
+
+    info!("uninstall_cc_hooks: successfully removed");
+    CcHookResult {
+        success: true,
+        error: None,
+    }
+}
+
 #[tauri::command]
 fn set_bongo_active(monitor: tauri::State<'_, BongoMonitor>, active: bool) -> Result<(), String> {
     monitor.set_active(active)
@@ -466,6 +682,8 @@ pub fn run() {
             pick_spritesheet,
             add_pet_from_spritesheet,
             remove_pet,
+            install_cc_hooks,
+            uninstall_cc_hooks,
             set_bongo_active,
             open_accessibility_settings
         ])
@@ -517,5 +735,25 @@ mod tests {
         let result = remove_pet_dry_run("cat");
         assert!(!result.success);
         assert!(result.error.unwrap().contains("内置"));
+    }
+
+    #[test]
+    fn install_cc_hooks_result_shape() {
+        let result = super::CcHookResult {
+            success: true,
+            error: None,
+        };
+        assert!(result.success);
+        assert!(result.error.is_none());
+    }
+
+    #[test]
+    fn uninstall_cc_hooks_result_shape() {
+        let result = super::CcHookResult {
+            success: true,
+            error: None,
+        };
+        assert!(result.success);
+        assert!(result.error.is_none());
     }
 }
