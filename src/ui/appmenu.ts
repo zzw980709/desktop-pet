@@ -103,18 +103,32 @@ export class NativeAppMenu {
     });
   }
 
-  private buildManageItems(): MenuItemOptions[] {
-    const items: MenuItemOptions[] = [
+  private buildManageItems(): Array<MenuItemOptions | PredefinedMenuItemOptions> {
+    const items: Array<MenuItemOptions | PredefinedMenuItemOptions> = [
       {
         id: 'add-pet',
         text: '添加宠物...',
         enabled: true,
         action: () => this.emit({ type: 'addPet' }),
       },
+      { item: 'Separator' },
+      {
+        id: 'install-cc-hooks',
+        text: '安装 CC Hooks',
+        enabled: true,
+        action: () => this.emit({ type: 'installCcHooks' }),
+      },
+      {
+        id: 'uninstall-cc-hooks',
+        text: '卸载 CC Hooks',
+        enabled: true,
+        action: () => this.emit({ type: 'uninstallCcHooks' }),
+      },
     ];
 
     const currentPet = this.pets.find((p) => p.id === this.currentPetId);
     if (currentPet && currentPet.removable) {
+      items.push({ item: 'Separator' });
       items.push({
         id: 'remove-pet',
         text: `移除 "${currentPet.label}"`,
