@@ -24,10 +24,7 @@ jobs:
       - name: Build Tauri app
         run: npm run tauri build
         env:
-          APPLE_SIGNING_IDENTITY: ""
-          APPLE_CERTIFICATE: ""
-          APPLE_CERTIFICATE_PASSWORD: ""
-          APPLE_TEAM_ID: ""
+          APPLE_SIGNING_IDENTITY: "-"
 
       - name: Set tag name
         id: tag
