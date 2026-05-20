@@ -316,9 +316,10 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
     screenW = mon.size.width / scale;
     screenH = mon.size.height / scale;
   }
-  behavior.setScreenBounds(screenW, screenH);
-  behavior.setCurrentPosition(cachedRoamX, cachedRoamY);
-  behavior.startRoaming();
+  // Roaming disabled — pet stays where placed
+  // behavior.setScreenBounds(screenW, screenH);
+  // behavior.setCurrentPosition(cachedRoamX, cachedRoamY);
+  // behavior.startRoaming();
 
   let heartAlpha = 0;
   const HEART_DURATION = 600;
