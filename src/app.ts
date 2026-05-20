@@ -14,6 +14,7 @@ import { discoverPets } from './pets/catalog';
 import type { PetCatalogEntry, PetState, Preferences } from './types';
 
 const DRAG_ANIMATED_STATES = new Set(['running-right', 'running-left']);
+const EDGE_DETECT_MARGIN = 40;
 
 function getRenderScale(canvas: HTMLCanvasElement): number {
   const widthScale = (canvas.clientWidth || 64) / CELL_WIDTH;
@@ -319,6 +320,7 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
   let heartAlpha = 0;
   const HEART_DURATION = 600;
   let heartTimer = 0;
+  let edgeRedirectCooldown = 0;
 
   behavior.on((nextState) => {
     animator.play(nextState);
@@ -454,16 +456,21 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
           cachedRoamX += disp.dx;
           cachedRoamY += disp.dy;
 
-          // Simple clamp to screen bounds
-          const { w } = getWindowSize(canvas);
+          // Clamp to screen bounds (account for window size)
+          const { w, h } = getWindowSize(canvas);
           cachedRoamX = Math.max(0, Math.min(cachedRoamX, screenW - w));
-          cachedRoamY = Math.max(0, Math.min(cachedRoamY, screenH));
+          cachedRoamY = Math.max(0, Math.min(cachedRoamY, screenH - h));
 
-          // Edge detection
-          if (cachedRoamX <= 20) {
-            behavior.redirectFromEdge('left');
-          } else if (cachedRoamX + w >= screenW - 20) {
-            behavior.redirectFromEdge('right');
+          // Edge detection with cooldown to prevent rapid-fire retargeting
+          edgeRedirectCooldown = Math.max(0, edgeRedirectCooldown - deltaMs);
+          if (edgeRedirectCooldown === 0) {
+            if (cachedRoamX <= EDGE_DETECT_MARGIN) {
+              behavior.redirectFromEdge('left');
+              edgeRedirectCooldown = 500;
+            } else if (cachedRoamX + w >= screenW - EDGE_DETECT_MARGIN) {
+              behavior.redirectFromEdge('right');
+              edgeRedirectCooldown = 500;
+            }
           }
 
           getCurrentWindow().setPosition(
