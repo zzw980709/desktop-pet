@@ -95,13 +95,6 @@ promptReset.addEventListener('click', () => {
   updatePromptCount();
 });
 
-intervalInput.addEventListener('input', () => {
-  const v = parseInt(intervalInput.value, 10);
-  const hint = document.getElementById('ai-interval-hint');
-  if (hint && v >= 60) {
-    hint.textContent = `约 ${Math.round(v / 60)} 分钟`;
-  }
-});
 
 testBtn.addEventListener('click', async () => {
   const config = readForm();

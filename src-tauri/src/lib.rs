@@ -834,6 +834,7 @@ async fn generate_event_reaction(
         let config = read_ai_config(&db).ok_or("no config".to_string())?;
 
         let desc_map: HashMap<&str, &str> = [
+            ("idle", "主人现在闲着，没做什么特别的事"),
             ("thinking", "主人正在认真思考"),
             ("tool-bash", "主人正在运行命令行"),
             ("tool-edit", "主人正在编辑代码"),

@@ -475,7 +475,8 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
           }
         }
       } else if (behavior.currentState !== 'idle') {
-        aiIdleAccumulator = 0;
+        // Keep accumulator running — don't reset, so idle chatter
+        // triggers after cumulative idle time across actions
       }
 
       // Apply roaming displacement after tick
