@@ -17,6 +17,7 @@ export default defineConfig(async () => ({
         main: 'index.html',
         'ai-settings': 'ai-settings.html',
         'pet-import': 'pet-import.html',
+        bubble: 'bubble.html',
       },
     },
   },

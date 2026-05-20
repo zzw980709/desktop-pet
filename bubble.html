@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 100%; height: 100%;
+        background: transparent;
+        overflow: hidden;
+      }
+      .bubble-wrap {
+        position: absolute;
+        bottom: 6px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        opacity: 0;
+        transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+        transform: translateX(-50%) translateY(4px);
+      }
+      .bubble-wrap.show {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+      .bubble-body {
+        background: #e3f2fd;
+        border: 2px solid #90caf9;
+        border-radius: 10px;
+        padding: 6px 14px;
+        font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        color: #333;
+        white-space: nowrap;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+      }
+      .bubble-tail {
+        width: 0;
+        height: 0;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 6px solid #90caf9;
+        margin-top: -1px;
+      }
+      .bubble-tail-inner {
+        width: 0;
+        height: 0;
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+        border-top: 4px solid #e3f2fd;
+        margin-top: -7px;
+        position: relative;
+        left: -4px;
+      }
+    </style>
+    <title>Bubble</title>
+  </head>
+  <body>
+    <div class="bubble-wrap" id="bubble-wrap">
+      <div class="bubble-body" id="bubble-body"></div>
+      <div class="bubble-tail"></div>
+    </div>
+    <script type="module" src="/src/bubble-main.ts"></script>
+  </body>
+</html>

@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::PathBuf;
+use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 use tracing::{error, info, warn};
@@ -112,6 +113,23 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // CC hook server for Claude Code integration
     let cc_server = cc_hooks::CcHookServer::start(app.handle().clone());
     app.manage(cc_server);
+
+    // Bubble window (hidden, shown on CC hook events)
+    let _ = tauri::WebviewWindowBuilder::new(
+        app,
+        "cc-bubble",
+        tauri::WebviewUrl::App("bubble.html".into()),
+    )
+    .title("")
+    .inner_size(350.0, 60.0)
+    .transparent(true)
+    .decorations(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .shadow(false)
+    .visible(false)
+    .resizable(false)
+    .build();
 
     info!("application setup complete");
     Ok(())
@@ -835,6 +853,66 @@ fn open_ai_settings_window(app_handle: tauri::AppHandle) {
     .build();
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BubbleData {
+    text: String,
+    emoji: String,
+    #[serde(rename = "bgColor")]
+    bg_color: String,
+    #[serde(rename = "borderColor")]
+    border_color: String,
+}
+
+#[tauri::command]
+fn show_bubble_window(app_handle: tauri::AppHandle, data: BubbleData) {
+    let Some(bubble_win) = app_handle.get_webview_window("cc-bubble") else {
+        return;
+    };
+    let Some(main_win) = app_handle.get_webview_window("main") else {
+        return;
+    };
+
+    // Position bubble above main window
+    if let Ok(pos) = main_win.outer_position() {
+        if let Ok(size) = main_win.outer_size() {
+            let bubble_x = pos.x + (size.width as i32 - 350) / 2;
+            let bubble_y = pos.y - 65; // above the pet
+            let _ = bubble_win.set_position(tauri::PhysicalPosition::new(bubble_x, bubble_y.max(0)));
+        }
+    }
+
+    let _ = bubble_win.emit("bubble-update", &data);
+    let _ = bubble_win.show();
+    let _ = bubble_win.set_focus();
+}
+
+#[tauri::command]
+fn hide_bubble_window(app_handle: tauri::AppHandle) {
+    if let Some(bubble_win) = app_handle.get_webview_window("cc-bubble") {
+        let _ = bubble_win.emit::<Option<BubbleData>>("bubble-update", None);
+        let _ = bubble_win.hide();
+    }
+}
+
+#[tauri::command]
+fn sync_bubble_position(app_handle: tauri::AppHandle) {
+    let Some(bubble_win) = app_handle.get_webview_window("cc-bubble") else {
+        return;
+    };
+    let Some(main_win) = app_handle.get_webview_window("main") else {
+        return;
+    };
+    if let Ok(true) = bubble_win.is_visible() {
+        if let Ok(pos) = main_win.outer_position() {
+            if let Ok(size) = main_win.outer_size() {
+                let bubble_x = pos.x + (size.width as i32 - 350) / 2;
+                let bubble_y = pos.y - 65;
+                let _ = bubble_win.set_position(tauri::PhysicalPosition::new(bubble_x, bubble_y.max(0)));
+            }
+        }
+    }
+}
+
 #[tauri::command]
 fn open_pet_import_window(app_handle: tauri::AppHandle) {
     let win = app_handle.get_webview_window("pet-import");
@@ -876,6 +954,9 @@ pub fn run() {
             test_ai_connection,
             open_ai_settings_window,
             open_pet_import_window,
+            show_bubble_window,
+            hide_bubble_window,
+            sync_bubble_position,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -17,12 +17,6 @@ import { setConfig, getConfig, buildMessages, addToHistory } from './ai/chat';
 const DRAG_ANIMATED_STATES = new Set(['running-right', 'running-left']);
 const EDGE_DETECT_MARGIN = 40;
 
-function easeOutBack(t: number): number {
-  const c1 = 1.70158;
-  const c3 = c1 + 1;
-  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-}
-
 function getRenderScale(canvas: HTMLCanvasElement): number {
   const widthScale = (canvas.clientWidth || 64) / CELL_WIDTH;
   const heightScale = (canvas.clientHeight || 64) / CELL_HEIGHT;
@@ -298,10 +292,31 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
     },
   };
 
-  let bubble: { config: CcEventConfig; phase: 'entering' | 'visible' | 'exiting'; timer: number } | null = null;
-  const BUBBLE_ENTER_MS = 300;
-  const BUBBLE_EXIT_MS = 400;
+  let bubbleActive = false;
+  let bubbleHideTimer: ReturnType<typeof setTimeout> | null = null;
   const BUBBLE_TRANSIENT_VISIBLE_MS = 2500;
+
+  function showBubble(config: CcEventConfig): void {
+    if (bubbleHideTimer) {
+      clearTimeout(bubbleHideTimer);
+      bubbleHideTimer = null;
+    }
+    bubbleActive = true;
+    void invoke('show_bubble_window', {
+      data: {
+        text: config.bubbleText,
+        emoji: config.emoji,
+        bgColor: config.bgColor,
+        borderColor: config.borderColor,
+      },
+    });
+    if (!config.persistent) {
+      bubbleHideTimer = setTimeout(() => {
+        void invoke('hide_bubble_window');
+        bubbleActive = false;
+      }, BUBBLE_TRANSIENT_VISIBLE_MS);
+    }
+  }
 
   async function handleCcEvent(eventName: string): Promise<void> {
     const config = ccEventConfig[eventName];
@@ -314,23 +329,14 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
     if (getConfig()) {
       try {
         const reaction = await invoke<string>('generate_event_reaction', { event: eventName });
-        bubble = {
-          config: { ...config, bubbleText: reaction },
-          phase: 'entering',
-          timer: BUBBLE_ENTER_MS,
-        };
+        showBubble({ ...config, bubbleText: reaction });
         return;
       } catch {
         // Fall through to static text
       }
     }
 
-    // Static fallback
-    if (bubble && bubble.config.persistent && config.persistent) {
-      bubble = { config, phase: 'visible', timer: 0 };
-    } else {
-      bubble = { config, phase: 'entering', timer: BUBBLE_ENTER_MS };
-    }
+    showBubble(config);
   }
   let edgeRedirectCooldown = 0;
   let aiIdleAccumulator = 0;
@@ -409,6 +415,13 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
 
   new Interactions(canvas, behavior);
 
+  // Sync bubble position when pet window moves
+  void getCurrentWindow().onMoved(() => {
+    if (bubbleActive) {
+      void invoke('sync_bubble_position');
+    }
+  });
+
   // Click-to-chat: when AI configured, click pet to chat
   let chatClickTimer = 0;
   canvas.addEventListener('click', () => {
@@ -424,27 +437,15 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
 
     addToHistory('user', msg.trim());
     const messages = buildMessages(msg.trim());
-    bubble = {
-      config: { state: 'review', bubbleText: '...', emoji: '💬', bgColor: '#e3f2fd', borderColor: '#90caf9', persistent: true },
-      phase: 'visible',
-      timer: 0,
-    };
+    showBubble({ state: 'review', bubbleText: '...', emoji: '💬', bgColor: '#e3f2fd', borderColor: '#90caf9', persistent: true });
 
     invoke<string>('chat_with_pet', { messages })
       .then((reply) => {
         addToHistory('assistant', reply);
-        bubble = {
-          config: { state: 'review', bubbleText: reply, emoji: '😺', bgColor: '#e8f5e9', borderColor: '#81c784', persistent: false },
-          phase: 'entering',
-          timer: BUBBLE_ENTER_MS,
-        };
+        showBubble({ state: 'review', bubbleText: reply, emoji: '😺', bgColor: '#e8f5e9', borderColor: '#81c784', persistent: false });
       })
       .catch((err) => {
-        bubble = {
-          config: { state: 'failed', bubbleText: String(err), emoji: '❌', bgColor: '#ffebee', borderColor: '#e57373', persistent: false },
-          phase: 'entering',
-          timer: BUBBLE_ENTER_MS,
-        };
+        showBubble({ state: 'failed', bubbleText: String(err), emoji: '❌', bgColor: '#ffebee', borderColor: '#e57373', persistent: false });
       });
   });
 
@@ -474,7 +475,7 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
 
       // Idle AI chatter
       const aiCfg = getConfig();
-      if (behavior.currentState === 'idle' && aiCfg?.idleChatEnabled && !bubble) {
+      if (behavior.currentState === 'idle' && aiCfg?.idleChatEnabled && !bubbleActive) {
         aiIdleAccumulator += deltaMs;
         const intervalMs = aiCfg.idleChatInterval * 1000;
         if (aiIdleAccumulator >= intervalMs) {
@@ -482,12 +483,8 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
           if (Math.random() < 0.1) {
             invoke<string>('generate_event_reaction', { event: 'idle' })
               .then((text) => {
-                if (bubble) return;
-                bubble = {
-                  config: { state: 'idle', bubbleText: text, emoji: '😺', bgColor: '#fff3e0', borderColor: '#ffb74d', persistent: false },
-                  phase: 'entering',
-                  timer: BUBBLE_ENTER_MS,
-                };
+                if (bubbleActive) return;
+                showBubble({ state: 'idle', bubbleText: text, emoji: '😺', bgColor: '#fff3e0', borderColor: '#ffb74d', persistent: false });
               })
               .catch(() => {});
           }
@@ -548,74 +545,6 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
         renderer.drawHeart(heartAlpha);
       }
 
-      if (bubble) {
-        bubble.timer -= deltaMs;
-        switch (bubble.phase) {
-          case 'entering': {
-            if (bubble.timer <= 0) {
-              bubble.phase = 'visible';
-              bubble.timer = 0;
-            }
-            const t = 1 - Math.max(0, bubble.timer / BUBBLE_ENTER_MS);
-            const scale = 0.3 + 0.7 * easeOutBack(t);
-            const alpha = t;
-            renderer.drawBubble({
-              text: bubble.config.bubbleText,
-              emoji: bubble.config.emoji,
-              bgColor: bubble.config.bgColor,
-              borderColor: bubble.config.borderColor,
-              scale,
-              alpha,
-            });
-            break;
-          }
-          case 'visible': {
-            if (bubble.config.persistent) {
-              renderer.drawBubble({
-                text: bubble.config.bubbleText,
-                emoji: bubble.config.emoji,
-                bgColor: bubble.config.bgColor,
-                borderColor: bubble.config.borderColor,
-                scale: 1,
-                alpha: 1,
-              });
-            } else {
-              if (bubble.timer <= -BUBBLE_TRANSIENT_VISIBLE_MS) {
-                bubble.phase = 'exiting';
-                bubble.timer = BUBBLE_EXIT_MS;
-              }
-              renderer.drawBubble({
-                text: bubble.config.bubbleText,
-                emoji: bubble.config.emoji,
-                bgColor: bubble.config.bgColor,
-                borderColor: bubble.config.borderColor,
-                scale: 1,
-                alpha: 1,
-              });
-            }
-            break;
-          }
-          case 'exiting': {
-            if (bubble.timer <= 0) {
-              bubble = null;
-              behavior.forceState('idle');
-              animator.play('idle');
-            } else {
-              const alpha = Math.max(0, bubble.timer / BUBBLE_EXIT_MS);
-              const scale = 1 - 0.1 * (1 - alpha);
-              renderer.drawBubble({
-                text: bubble.config.bubbleText,
-                emoji: bubble.config.emoji,
-                bgColor: bubble.config.bgColor,
-                borderColor: bubble.config.borderColor,
-                scale,
-                alpha,
-              });
-            }
-            break;
-          }
-        }
-      }
     } catch (err) {
       // Rate-limit loop errors to 1 per 2 seconds
       const now = performance.now();
