@@ -16,6 +16,7 @@ export type MenuAction =
   | { type: 'pet'; petId: string }
   | { type: 'addPet' }
   | { type: 'removePet'; petId: string }
+  | { type: 'aiSettings' }
   | { type: 'installCcHooks' }
   | { type: 'uninstallCcHooks' }
 

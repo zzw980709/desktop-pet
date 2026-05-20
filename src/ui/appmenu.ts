@@ -113,6 +113,13 @@ export class NativeAppMenu {
       },
       { item: 'Separator' },
       {
+        id: 'ai-settings',
+        text: 'AI 设置...',
+        enabled: true,
+        action: () => this.emit({ type: 'aiSettings' }),
+      },
+      { item: 'Separator' },
+      {
         id: 'install-cc-hooks',
         text: '安装 CC Hooks',
         enabled: true,

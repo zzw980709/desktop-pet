@@ -34,7 +34,17 @@ export interface Position {
   y: number;
 }
 
+export interface AiConfig {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  systemPrompt: string;
+  idleChatEnabled: boolean;
+  idleChatInterval: number;
+}
+
 export interface Preferences {
   activePetId: string;
   windowPosition?: Position;
+  aiConfig?: AiConfig;
 }
