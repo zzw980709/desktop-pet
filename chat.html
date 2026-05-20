@@ -1,149 +1,151 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body {
-        width: 100%; height: 100%;
-        background: #1e1e2e;
-        overflow: hidden;
-        font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
-      }
-      .chat-container {
-        width: 100%; height: 100%;
-        display: flex; flex-direction: column;
-        color: #cdd6f4;
-      }
-      .chat-header {
-        display: flex; align-items: center;
-        padding: 12px 16px;
-        border-bottom: 1px solid #313244;
-        flex-shrink: 0;
-      }
-      .chat-header-emoji { font-size: 22px; margin-right: 8px; }
-      .chat-header-name { font-size: 14px; font-weight: 600; color: #fff; flex: 1; }
-      .chat-header-btn {
-        width: 28px; height: 28px;
-        border: none; background: transparent;
-        color: #a6adc8; font-size: 16px;
-        cursor: pointer; border-radius: 6px;
-        display: flex; align-items: center; justify-content: center;
-      }
-      .chat-header-btn:hover { background: #313244; color: #fff; }
-      .chat-messages {
-        flex: 1; overflow-y: auto;
-        padding: 16px;
-        display: flex; flex-direction: column;
-        gap: 12px;
-      }
-      .chat-messages::-webkit-scrollbar { width: 4px; }
-      .chat-messages::-webkit-scrollbar-thumb { background: #45475a; border-radius: 2px; }
-      .chat-msg {
-        max-width: 85%;
-        padding: 10px 14px;
-        border-radius: 12px;
-        font-size: 13px;
-        line-height: 1.5;
-        word-break: break-word;
-      }
-      .chat-msg.user {
-        align-self: flex-end;
-        background: linear-gradient(135deg, #4fc3f7, #7c4dff);
-        color: #fff;
-        border-bottom-right-radius: 4px;
-      }
-      .chat-msg.assistant {
-        align-self: flex-start;
-        background: #313244;
-        color: #cdd6f4;
-        border-bottom-left-radius: 4px;
-      }
-      .chat-msg.error {
-        align-self: flex-start;
-        background: rgba(243,139,168,0.15);
-        border: 1px solid rgba(243,139,168,0.3);
-        color: #f38ba8;
-      }
-      .chat-msg.loading {
-        align-self: flex-start;
-        background: #313244;
-        color: #a6adc8;
-        padding: 10px 20px;
-      }
-      .chat-msg.loading .dot-pulse {
-        display: inline-block; width: 6px; height: 6px;
-        border-radius: 50%; background: #a6adc8;
-        animation: pulse 1.2s infinite;
-        margin: 0 2px;
-      }
-      .chat-msg.loading .dot-pulse:nth-child(2) { animation-delay: 0.2s; }
-      .chat-msg.loading .dot-pulse:nth-child(3) { animation-delay: 0.4s; }
-      @keyframes pulse {
-        0%, 80%, 100% { opacity: 0.3; }
-        40% { opacity: 1; }
-      }
-      .chat-empty {
-        flex: 1; display: flex; flex-direction: column;
-        align-items: center; justify-content: center;
-        color: #585b70; font-size: 13px; gap: 12px;
-      }
-      .chat-empty button {
-        padding: 8px 20px; border: none; border-radius: 8px;
-        background: linear-gradient(135deg, #4fc3f7, #7c4dff);
-        color: #fff; font-size: 13px; font-weight: 600; cursor: pointer;
-      }
-      .chat-input-area {
-        padding: 12px 16px;
-        border-top: 1px solid #313244;
-        display: flex; gap: 8px;
-        flex-shrink: 0;
-      }
-      .chat-input-area textarea {
-        flex: 1;
-        padding: 10px 12px;
-        background: #313244;
-        border: 1px solid #45475a;
-        border-radius: 10px;
-        color: #cdd6f4;
-        font-size: 13px;
-        font-family: inherit;
-        resize: none;
-        outline: none;
-        line-height: 1.4;
-      }
-      .chat-input-area textarea:focus { border-color: #7c4dff; }
-      .chat-send-btn {
-        width: 40px; height: 40px;
-        border: none; border-radius: 10px;
-        background: linear-gradient(135deg, #4fc3f7, #7c4dff);
-        color: #fff; font-size: 16px; cursor: pointer;
-        flex-shrink: 0;
-        display: flex; align-items: center; justify-content: center;
-      }
-      .chat-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    </style>
-    <title>Chat</title>
-  </head>
-  <body>
-    <div class="chat-container">
-      <div class="chat-header">
-        <span class="chat-header-emoji" id="chat-header-emoji">🐱</span>
-        <span class="chat-header-name" id="chat-header-name">小橘</span>
-        <button class="chat-header-btn" id="chat-expand-btn" title="展开">⤡</button>
-        <button class="chat-header-btn" id="chat-close-btn" title="关闭">✕</button>
-      </div>
-      <div class="chat-messages" id="chat-messages"></div>
-      <div class="chat-empty" id="chat-empty" style="display:none">
-        <div>💬</div>
-        <span>跟我聊聊吧~</span>
-      </div>
-      <div class="chat-input-area">
-        <textarea id="chat-input" rows="1" placeholder="输入消息..."></textarea>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body {
+    width:100%; height:100%;
+    background:#1e1e2e; overflow:hidden;
+    font-family:-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  }
+  .chat-container { width:100%; height:100%; display:flex; flex-direction:column; color:#cdd6f4; }
+  .chat-container.chat-full { flex-direction:row; }
+  .chat-header {
+    display:flex; align-items:center; gap:8px;
+    padding:11px 14px; flex-shrink:0; user-select:none;
+  }
+  .chat-header-emoji { font-size:20px; }
+  .chat-header-name { font-size:13px; font-weight:600; color:#fff; flex:1; }
+  .chat-header-sub { font-size:12px; color:#a6adc8; flex:1; display:none; }
+  .chat-header-btn {
+    width:28px; height:28px; display:flex; align-items:center; justify-content:center;
+    border:none; background:transparent; color:#a6adc8; font-size:15px;
+    cursor:pointer; border-radius:8px; transition:all .15s;
+  }
+  .chat-header-btn:hover { background:#313244; color:#fff; }
+  .chat-messages {
+    flex:1; overflow-y:auto; padding:14px;
+    display:flex; flex-direction:column; gap:12px;
+  }
+  .chat-messages::-webkit-scrollbar { width:4px; }
+  .chat-messages::-webkit-scrollbar-thumb { background:#45475a; border-radius:2px; }
+  .msg {
+    max-width:82%; padding:9px 13px; border-radius:13px;
+    font-size:13px; line-height:1.55; word-break:break-word;
+    animation:msgIn .28s ease-out;
+  }
+  @keyframes msgIn { from{opacity:0;transform:translateY(6px);} to{opacity:1;transform:translateY(0);} }
+  .msg.assistant {
+    align-self:flex-start; background:#313244; color:#cdd6f4;
+    border-bottom-left-radius:5px; border-left:2.5px solid #a6e3a1;
+  }
+  .msg.user {
+    align-self:flex-end;
+    background:linear-gradient(135deg, #cba6f7, #e8a0bf); color:#1e1e2e;
+    font-weight:500; border-bottom-right-radius:5px;
+  }
+  .msg.error {
+    align-self:flex-start;
+    background:rgba(243,139,168,0.12); border:1px solid rgba(243,139,168,0.25);
+    color:#f38ba8;
+  }
+  .msg.loading { align-self:flex-start; background:#313244; padding:11px 18px; border-bottom-left-radius:5px; }
+  .dot { display:inline-block; width:5px; height:5px; border-radius:50%; background:#a6adc8; margin:0 2px; }
+  .dot:nth-child(1){animation:dotB 1.2s infinite}
+  .dot:nth-child(2){animation:dotB 1.2s infinite .2s}
+  .dot:nth-child(3){animation:dotB 1.2s infinite .4s}
+  @keyframes dotB { 0%,80%,100%{opacity:.3;transform:scale(.8)} 40%{opacity:1;transform:scale(1)} }
+  .chat-input-wrap { padding:8px 14px 14px; flex-shrink:0; display:flex; align-items:center; }
+  .chat-capsule {
+    flex:1; display:flex; align-items:center;
+    background:#313244; border-radius:22px;
+    border:1.5px solid transparent; padding:2px 2px 2px 14px;
+    transition:border-color .2s, box-shadow .2s;
+  }
+  .chat-capsule:focus-within { border-color:#cba6f7; box-shadow:0 0 0 3px rgba(203,166,247,0.1); }
+  .chat-capsule textarea {
+    flex:1; background:transparent; border:none; outline:none;
+    color:#cdd6f4; font-size:13px; font-family:inherit;
+    resize:none; padding:6px 0; line-height:1.4;
+  }
+  .chat-capsule textarea::placeholder { color:#585b70; }
+  .chat-send-btn {
+    width:32px; height:32px; border:none; border-radius:50%;
+    background:#fab387; color:#1e1e2e; font-size:15px; font-weight:700;
+    cursor:pointer; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    transition:all .15s;
+  }
+  .chat-send-btn:hover { transform:scale(1.08); background:#f5c293; }
+  .chat-send-btn:disabled { opacity:.4; cursor:not-allowed; transform:none; }
+  .chat-empty {
+    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    color:#585b70; font-size:13px; gap:10px;
+  }
+  .chat-empty-emoji { font-size:36px; opacity:.6; }
+  .chat-settings-btn {
+    padding:8px 20px; border:none; border-radius:8px;
+    background:linear-gradient(135deg, #89b4fa, #cba6f7);
+    color:#1e1e2e; font-size:13px; font-weight:600; cursor:pointer; margin-top:4px;
+  }
+  /* Sidebar (full mode) */
+  .chat-sidebar {
+    width:138px; background:#181825; flex-shrink:0;
+    display:none; flex-direction:column; padding:6px;
+  }
+  .chat-full .chat-sidebar { display:flex; }
+  .chat-sidebar-hd { padding:10px 8px 8px; font-size:11px; font-weight:600; color:#6c7086; letter-spacing:.5px; }
+  .chat-sidebar-list { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:2px; }
+  .chat-sidebar-list::-webkit-scrollbar { width:3px; }
+  .chat-sidebar-list::-webkit-scrollbar-thumb { background:#45475a; border-radius:1.5px; }
+  .sidebar-item {
+    padding:9px 8px; border-radius:9px; cursor:pointer;
+    font-size:12px; color:#a6adc8; line-height:1.3; transition:all .15s;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .sidebar-item:hover { background:#313244; color:#cdd6f4; }
+  .sidebar-item.active { background:#313244; color:#fff; font-weight:500; }
+  .sidebar-item-time { font-size:10px; color:#585b70; margin-top:2px; }
+  .sidebar-new-btn {
+    margin-top:6px; padding:8px; border:none; background:transparent;
+    color:#cba6f7; font-size:12px; font-weight:500; cursor:pointer;
+    border-radius:9px; text-align:left; transition:all .15s;
+  }
+  .sidebar-new-btn:hover { background:#313244; }
+  .chat-main-area { flex:1; display:flex; flex-direction:column; min-width:0; }
+</style>
+<title>Chat</title>
+</head>
+<body>
+<div class="chat-container" id="chat-container">
+  <div class="chat-sidebar" id="chat-sidebar">
+    <div class="chat-sidebar-hd">对话</div>
+    <div class="chat-sidebar-list" id="sidebar-list"></div>
+    <button class="sidebar-new-btn" id="sidebar-new-btn">＋ 新对话</button>
+  </div>
+  <div class="chat-main-area" id="chat-main-area">
+    <div class="chat-header" id="chat-header">
+      <span class="chat-header-emoji" id="chat-header-emoji">🐱</span>
+      <span class="chat-header-name" id="chat-header-name">小橘</span>
+      <span class="chat-header-sub" id="chat-header-sub"></span>
+      <button class="chat-header-btn" id="chat-expand-btn" title="展开">⤡</button>
+      <button class="chat-header-btn" id="chat-close-btn" title="关闭">✕</button>
+    </div>
+    <div class="chat-messages" id="chat-messages"></div>
+    <div class="chat-empty" id="chat-empty">
+      <div class="chat-empty-emoji">💬</div>
+      <span>跟我聊聊吧~</span>
+    </div>
+    <div class="chat-input-wrap">
+      <div class="chat-capsule">
+        <textarea id="chat-input" rows="1" placeholder="说点什么..."></textarea>
         <button class="chat-send-btn" id="chat-send-btn">↑</button>
       </div>
     </div>
-    <script type="module" src="/src/chat-main.ts"></script>
-  </body>
+  </div>
+</div>
+<script type="module" src="/src/chat-main.ts"></script>
+</body>
 </html>

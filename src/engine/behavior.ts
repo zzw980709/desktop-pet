@@ -35,6 +35,7 @@ export class BehaviorEngine {
   private idleTimer = 0;
   private stateElapsed = 0;
   private dragging = false;
+  recentlyDragged = false;
   private dragSettleTimer = 0;
   private _ccForced = false;
   private rng: () => number;
@@ -270,6 +271,8 @@ export class BehaviorEngine {
 
   handleDragEnd(): void {
     this.dragging = false;
+    this.recentlyDragged = true;
+    setTimeout(() => { this.recentlyDragged = false; }, 400);
     if (DIRECTIONAL_DRAG_STATES.includes(this._currentState)) {
       this.dragSettleTimer = DRAG_SETTLE_MS;
       return;

@@ -427,7 +427,7 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
   let chatClickTimer = 0;
   canvas.addEventListener('click', () => {
     if (!getConfig()) return;
-    if (behavior.isDragging) return;
+    if (behavior.isDragging || behavior.recentlyDragged) return;
     const now = performance.now();
     if (now - chatClickTimer < 300) return;
     chatClickTimer = now;

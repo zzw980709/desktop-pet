@@ -1,16 +1,20 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { PhysicalSize } from '@tauri-apps/api/dpi';
+import { LogicalSize } from '@tauri-apps/api/dpi';
 
 interface HistoryEntry { role: 'user' | 'assistant'; content: string; }
 
+const containerEl = document.getElementById('chat-container')!;
 const messagesEl = document.getElementById('chat-messages')!;
 const emptyEl = document.getElementById('chat-empty')!;
 const inputEl = document.getElementById('chat-input')! as HTMLTextAreaElement;
 const sendBtn = document.getElementById('chat-send-btn')! as HTMLButtonElement;
 const expandBtn = document.getElementById('chat-expand-btn')!;
 const closeBtn = document.getElementById('chat-close-btn')!;
+const headerName = document.getElementById('chat-header-name')!;
+const headerSub = document.getElementById('chat-header-sub')!;
+const sidebarList = document.getElementById('sidebar-list')!;
 
 let sending = false;
 let isFullMode = false;
@@ -28,7 +32,7 @@ function renderMessages(entries: HistoryEntry[]): void {
   emptyEl.style.display = 'none';
   for (const e of entries) {
     const div = document.createElement('div');
-    div.className = `chat-msg ${e.role}`;
+    div.className = `msg ${e.role}`;
     div.textContent = e.content;
     messagesEl.appendChild(div);
   }
@@ -38,9 +42,9 @@ function renderMessages(entries: HistoryEntry[]): void {
 function appendMessage(role: 'user' | 'assistant' | 'error' | 'loading', content: string): HTMLElement {
   emptyEl.style.display = 'none';
   const div = document.createElement('div');
-  div.className = `chat-msg ${role}`;
+  div.className = `msg ${role}`;
   if (role === 'loading') {
-    div.innerHTML = '<span class="dot-pulse"></span><span class="dot-pulse"></span><span class="dot-pulse"></span>';
+    div.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
   } else {
     div.textContent = content;
   }
@@ -49,10 +53,23 @@ function appendMessage(role: 'user' | 'assistant' | 'error' | 'loading', content
   return div;
 }
 
+function updateSidebar(entries: HistoryEntry[]): void {
+  if (!isFullMode) return;
+  sidebarList.innerHTML = '';
+  const userMessages = entries.filter((e) => e.role === 'user');
+  for (let i = userMessages.length - 1; i >= 0; i--) {
+    const item = document.createElement('div');
+    item.className = 'sidebar-item' + (i === userMessages.length - 1 ? ' active' : '');
+    item.textContent = userMessages[i].content.slice(0, 20) || '(新对话)';
+    sidebarList.appendChild(item);
+  }
+}
+
 async function loadHistory(): Promise<void> {
   try {
     const entries = await invoke<HistoryEntry[]>('load_chat_history');
     renderMessages(entries);
+    updateSidebar(entries);
   } catch {
     renderMessages([]);
   }
@@ -66,7 +83,7 @@ async function sendMessage(): Promise<void> {
     const config = await invoke<{ apiKey: string } | null>('get_ai_config');
     if (!config || !config.apiKey) {
       emptyEl.style.display = '';
-      emptyEl.innerHTML = '<div>⚠️ 请先在 AI 设置中配置 API Key</div><button id="chat-open-settings">打开设置</button>';
+      emptyEl.innerHTML = '<div>⚠️ 请先在 AI 设置中配置 API Key</div><button class="chat-settings-btn" id="chat-open-settings">打开设置</button>';
       document.getElementById('chat-open-settings')?.addEventListener('click', () => {
         void invoke('open_ai_settings_window');
       });
@@ -79,10 +96,11 @@ async function sendMessage(): Promise<void> {
   inputEl.value = '';
 
   appendMessage('user', msg);
+  void invoke('save_chat_message', { role: 'user', content: msg });
 
   if (isFullMode) {
     const loadingEl = appendMessage('loading', '');
-    loadingEl.className = 'chat-msg assistant';
+    loadingEl.className = 'msg assistant';
     loadingEl.textContent = '';
 
     const unlisten = await listen<string>('chat-stream-token', (event) => {
@@ -90,16 +108,20 @@ async function sendMessage(): Promise<void> {
       scrollToBottom();
     });
 
+    let reply = '';
     try {
-      const reply = await invoke<string>('chat_with_pet_stream', {
+      reply = await invoke<string>('chat_with_pet_stream', {
         messages: [{ role: 'system', content: '' }, { role: 'user', content: msg }],
       });
       if (!reply) loadingEl.textContent = loadingEl.textContent || '(empty)';
     } catch (e) {
       loadingEl.textContent = String(e);
-      loadingEl.className = 'chat-msg error';
+      loadingEl.className = 'msg error';
     }
     unlisten();
+    if (reply) {
+      void invoke('save_chat_message', { role: 'assistant', content: reply });
+    }
   } else {
     const loadingEl = appendMessage('loading', '');
     try {
@@ -108,6 +130,7 @@ async function sendMessage(): Promise<void> {
       });
       loadingEl.remove();
       appendMessage('assistant', reply);
+      void invoke('save_chat_message', { role: 'assistant', content: reply });
     } catch (e) {
       loadingEl.remove();
       appendMessage('error', String(e));
@@ -134,17 +157,31 @@ expandBtn.addEventListener('click', async () => {
   const win = getCurrentWindow();
   if (!isFullMode) {
     isFullMode = true;
-    await win.setSize(new PhysicalSize(480, 600));
+    await win.setSize(new LogicalSize(480, 600));
     await win.setResizable(true);
+    containerEl.classList.add('chat-full');
+    headerName.style.display = 'none';
+    headerSub.style.display = '';
     expandBtn.textContent = '⤢';
     expandBtn.title = '收缩';
+    const entries = await invoke<HistoryEntry[]>('load_chat_history');
+    updateSidebar(entries);
   } else {
     isFullMode = false;
-    await win.setSize(new PhysicalSize(340, 440));
+    await win.setSize(new LogicalSize(340, 440));
     await win.setResizable(false);
+    containerEl.classList.remove('chat-full');
+    headerName.style.display = '';
+    headerSub.style.display = 'none';
     expandBtn.textContent = '⤡';
     expandBtn.title = '展开';
   }
+});
+
+document.getElementById('sidebar-new-btn')?.addEventListener('click', () => {
+  messagesEl.innerHTML = '';
+  emptyEl.style.display = '';
+  sidebarList.innerHTML = '';
 });
 
 void loadHistory();
