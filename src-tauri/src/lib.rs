@@ -111,6 +111,10 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     }
     app.manage(bongo_monitor);
 
+    // CC hook server disabled for debugging
+    // let cc_server = cc_hooks::CcHookServer::start(app.handle().clone());
+    // app.manage(cc_server);
+
     info!("application setup complete");
     Ok(())
 }
