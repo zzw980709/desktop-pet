@@ -61,15 +61,18 @@ static IS_LISTENING: AtomicBool; // 防重入
 pub fn start_keyboard_listening(app_handle: AppHandle) -> Result<(), String> {
     // 检查 IS_LISTENING，已启动则直接返回 Ok
     // 设 IS_LISTENING = true
-    // spawn 后台线程:
-    //   rdev::listen(callback)  // 阻塞直到出错
-    //   callback: KeyPress → classify_key() → emit("bongo-tap")
-    //   出错时设 IS_LISTENING = false
+    // 直接调用 rdev::listen(callback)  // 阻塞直到出错
+    // callback: KeyPress → classify_key() → emit("bongo-tap")
+    // 出错时设 IS_LISTENING = false
 }
 ```
 
+**注意：** 必须使用原版 `rdev = "0.5"`（crates.io），不能使用 kunkunsh 等 fork。原版用 `CFRunLoopGetCurrent()` 在当前线程 run loop 上添加事件源并阻塞，fork 改用 `CFRunLoopGetMain()` 会导致事件源和 run loop 在不同线程，`CFRunLoopRun()` 立即返回。
+
+**调用方式：** `start_keyboard_listening` 会阻塞调用线程。`setup_app` 通过 `std::thread::spawn` 在后台线程中调用；`retry_keyboard_listening` 同理。不能直接在 UI 线程调用。
+
 启动方式：
-- `setup_app` 中自动调用（应用启动即监听）
+- `setup_app` 中通过 `std::thread::spawn` 自动启动
 - 前端 `retryBongo` 菜单调用 `retry_keyboard_listening` 命令（重试）
 
 ## classifier.rs 设计

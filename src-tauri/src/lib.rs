@@ -2,7 +2,6 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
-use bongo::start_keyboard_listening;
 use tracing::{error, info, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use tracing_appender::rolling::RollingFileAppender;
@@ -104,10 +103,14 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     init_builtin_pet(&app_data);
     init_preferences(&app_data);
 
-    // Start keyboard listening via rdev (cross-platform)
-    if let Err(e) = bongo::start_keyboard_listening(app.handle().clone()) {
-        warn!("keyboard listening failed to start: {}", e);
-    }
+    // Start keyboard listening via rdev in background thread
+    // (rdev::listen blocks, so we run it off the main thread)
+    let handle = app.handle().clone();
+    std::thread::spawn(move || {
+        if let Err(e) = bongo::start_keyboard_listening(handle) {
+            warn!("keyboard listening failed: {}", e);
+        }
+    });
 
     // CC hook server for Claude Code integration
     let cc_server = cc_hooks::CcHookServer::start(app.handle().clone());
@@ -682,7 +685,10 @@ fn uninstall_cc_hooks() -> CcHookResult {
 
 #[tauri::command]
 fn retry_keyboard_listening(app_handle: tauri::AppHandle) -> Result<(), String> {
-    start_keyboard_listening(app_handle)
+    std::thread::spawn(move || {
+        let _ = bongo::start_keyboard_listening(app_handle);
+    });
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
