@@ -102,6 +102,11 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     init_builtin_pet(&app_data);
     init_preferences(&app_data);
 
+    // Auto-install CC hooks on startup
+    if let Err(e) = install_cc_hooks_internal() {
+        warn!("auto-install CC hooks failed: {}", e);
+    }
+
     // CC hook server for Claude Code integration
     let cc_server = cc_hooks::CcHookServer::start(app.handle().clone());
     app.manage(cc_server);
@@ -488,10 +493,7 @@ struct CcHookResult {
     error: Option<String>,
 }
 
-#[tauri::command]
-fn install_cc_hooks() -> CcHookResult {
-    info!("install_cc_hooks: installing hook configuration");
-
+fn install_cc_hooks_internal() -> Result<(), String> {
     let settings_path = cc_settings_path();
 
     // Backup existing settings (only if no previous backup exists)
@@ -502,10 +504,7 @@ fn install_cc_hooks() -> CcHookResult {
                 Ok(_) => info!("backed up settings.json"),
                 Err(e) => {
                     error!("failed to backup settings.json: {}", e);
-                    return CcHookResult {
-                        success: false,
-                        error: Some(format!("无法备份 settings.json: {}", e)),
-                    };
+                    return Err(format!("无法备份 settings.json: {}", e));
                 }
             }
         }
@@ -518,18 +517,12 @@ fn install_cc_hooks() -> CcHookResult {
                 Ok(v) => v,
                 Err(e) => {
                     error!("failed to parse settings.json: {}", e);
-                    return CcHookResult {
-                        success: false,
-                        error: Some(format!("settings.json 格式错误: {}", e)),
-                    };
+                    return Err(format!("settings.json 格式错误: {}", e));
                 }
             },
             Err(e) => {
                 error!("failed to read settings.json: {}", e);
-                return CcHookResult {
-                    success: false,
-                    error: Some(format!("无法读取 settings.json: {}", e)),
-                };
+                return Err(format!("无法读取 settings.json: {}", e));
             }
         }
     } else {
@@ -543,10 +536,7 @@ fn install_cc_hooks() -> CcHookResult {
         .and_then(|v| v.as_object_mut());
 
     let Some(hooks_obj) = hooks_obj else {
-        return CcHookResult {
-            success: false,
-            error: Some("无法解析 settings.json hooks 字段".into()),
-        };
+        return Err("无法解析 settings.json hooks 字段".into());
     };
 
     for entry in HOOK_ENTRIES {
@@ -576,37 +566,25 @@ fn install_cc_hooks() -> CcHookResult {
         Ok(c) => c,
         Err(e) => {
             error!("failed to serialize settings.json: {}", e);
-            return CcHookResult {
-                success: false,
-                error: Some(format!("序列化 settings.json 失败: {}", e)),
-            };
+            return Err(format!("序列化 settings.json 失败: {}", e));
         }
     };
     if let Err(e) = fs::write(&settings_path, &content) {
         error!("failed to write settings.json: {}", e);
-        return CcHookResult {
-            success: false,
-            error: Some(format!("无法写入 settings.json: {}", e)),
-        };
+        return Err(format!("无法写入 settings.json: {}", e));
     }
 
     // Write notify.sh script
     let hooks_dir = cc_hooks_dir();
     if let Err(e) = fs::create_dir_all(&hooks_dir) {
         error!("failed to create hooks dir: {}", e);
-        return CcHookResult {
-            success: false,
-            error: Some(format!("无法创建 hook 目录: {}", e)),
-        };
+        return Err(format!("无法创建 hook 目录: {}", e));
     }
 
     let notify_script = NOTIFY_SCRIPT.replace("PORT", &cc_hooks::CC_HOOK_PORT.to_string());
     if let Err(e) = fs::write(hooks_dir.join("notify.sh"), &notify_script) {
         error!("failed to write notify.sh: {}", e);
-        return CcHookResult {
-            success: false,
-            error: Some(format!("无法写入 notify.sh: {}", e)),
-        };
+        return Err(format!("无法写入 notify.sh: {}", e));
     }
 
     // Make executable
@@ -622,9 +600,14 @@ fn install_cc_hooks() -> CcHookResult {
     }
 
     info!("install_cc_hooks: successfully installed");
-    CcHookResult {
-        success: true,
-        error: None,
+    Ok(())
+}
+
+#[tauri::command]
+fn install_cc_hooks() -> CcHookResult {
+    match install_cc_hooks_internal() {
+        Ok(()) => CcHookResult { success: true, error: None },
+        Err(e) => CcHookResult { success: false, error: Some(e) },
     }
 }
 
