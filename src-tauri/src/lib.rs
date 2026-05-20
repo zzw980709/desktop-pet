@@ -805,6 +805,42 @@ async fn test_ai_connection(
     ai::chat(&config, &messages, 15).await.map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn open_ai_settings_window(app_handle: tauri::AppHandle) {
+    let win = app_handle.get_webview_window("ai-settings");
+    if let Some(w) = win {
+        let _ = w.set_focus();
+        return;
+    }
+    let _ = tauri::WebviewWindowBuilder::new(
+        &app_handle,
+        "ai-settings",
+        tauri::WebviewUrl::App("ai-settings.html".into()),
+    )
+    .title("AI 设置")
+    .inner_size(460.0, 620.0)
+    .resizable(false)
+    .build();
+}
+
+#[tauri::command]
+fn open_pet_import_window(app_handle: tauri::AppHandle) {
+    let win = app_handle.get_webview_window("pet-import");
+    if let Some(w) = win {
+        let _ = w.set_focus();
+        return;
+    }
+    let _ = tauri::WebviewWindowBuilder::new(
+        &app_handle,
+        "pet-import",
+        tauri::WebviewUrl::App("pet-import.html".into()),
+    )
+    .title("添加宠物")
+    .inner_size(340.0, 290.0)
+    .resizable(false)
+    .build();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -825,6 +861,8 @@ pub fn run() {
             chat_with_pet,
             generate_event_reaction,
             test_ai_connection,
+            open_ai_settings_window,
+            open_pet_import_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

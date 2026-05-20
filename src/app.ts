@@ -1,7 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window';
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { LogicalPosition } from '@tauri-apps/api/dpi';
 import { loadPet } from './engine/loader';
 import { Renderer } from './engine/renderer';
@@ -168,20 +167,8 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
     syncMenuPets(pets, activePet.id);
   }
 
-  async function openPetImportWindow(): Promise<void> {
-    const existing = await WebviewWindow.getByLabel('pet-import');
-    if (existing) {
-      await existing.setFocus();
-      return;
-    }
-    new WebviewWindow('pet-import', {
-      url: 'pet-import.html',
-      title: '添加宠物',
-      width: 340,
-      height: 290,
-      resizable: false,
-      decorations: true,
-    });
+  function openPetImportWindow(): void {
+    void invoke('open_pet_import_window');
   }
 
   animator.on(() => {
@@ -384,22 +371,9 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
           }
         }
         break;
-      case 'aiSettings': {
-        const existing = await WebviewWindow.getByLabel('ai-settings');
-        if (existing) {
-          await existing.setFocus();
-        } else {
-          new WebviewWindow('ai-settings', {
-            url: 'ai-settings.html',
-            title: 'AI 设置',
-            width: 460,
-            height: 620,
-            resizable: false,
-            decorations: true,
-          });
-        }
+      case 'aiSettings':
+        void invoke('open_ai_settings_window');
         break;
-      }
       case 'installCcHooks':
         {
           const result = await invoke<{ success: boolean; error?: string }>('install_cc_hooks');
