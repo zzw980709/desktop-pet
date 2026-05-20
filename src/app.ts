@@ -1,6 +1,7 @@
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { LogicalPosition } from '@tauri-apps/api/dpi';
 import { loadPet } from './engine/loader';
 import { Renderer } from './engine/renderer';
@@ -12,7 +13,6 @@ import type { MenuAction } from './ui/menu-model';
 import { CELL_HEIGHT, CELL_WIDTH } from './pets/contract';
 import { discoverPets } from './pets/catalog';
 import type { PetCatalogEntry, PetState, Preferences } from './types';
-import { showAiSettings } from './ui/ai-settings';
 import { setConfig, getConfig, buildMessages, addToHistory } from './ai/chat';
 
 const DRAG_ANIMATED_STATES = new Set(['running-right', 'running-left']);
@@ -505,12 +505,14 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
         }
         break;
       case 'aiSettings': {
-        const cfg = getConfig();
-        const newCfg = await showAiSettings(cfg);
-        if (newCfg) {
-          await invoke('set_ai_config', { config: newCfg });
-          setConfig(newCfg);
-        }
+        new WebviewWindow('ai-settings', {
+          url: 'ai-settings.html',
+          title: 'AI 设置',
+          width: 460,
+          height: 620,
+          resizable: false,
+          decorations: true,
+        });
         break;
       }
       case 'installCcHooks':
@@ -533,6 +535,16 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
   }
 
   nativeMenu.on(handleMenuAction);
+
+  // AI config change listener (from settings window)
+  void listen<{ apiKey: string }>('ai-config-changed', (event) => {
+    try {
+      const config = event.payload as unknown as import('./types').AiConfig;
+      setConfig(config);
+    } catch (err) {
+      console.error('[app] ai-config-changed error:', err);
+    }
+  });
 
   // CC Hook event listener with AI-powered reactions
   void listen<string>('cc-event', (event) => {
