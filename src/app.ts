@@ -12,6 +12,8 @@ import type { MenuAction } from './ui/menu-model';
 import { CELL_HEIGHT, CELL_WIDTH } from './pets/contract';
 import { discoverPets } from './pets/catalog';
 import type { PetCatalogEntry, PetState, Preferences } from './types';
+import { showAiSettings } from './ui/ai-settings';
+import { setConfig, getConfig, buildMessages, addToHistory } from './ai/chat';
 
 const DRAG_ANIMATED_STATES = new Set(['running-right', 'running-left']);
 const EDGE_DETECT_MARGIN = 40;
@@ -94,6 +96,7 @@ function validateSpritesheetDimensions(img: HTMLImageElement): SpritesheetValida
 
 export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
   const prefs = await invoke<Preferences>('load_preferences');
+  if (prefs.aiConfig) setConfig(prefs.aiConfig);
 
   if (prefs.windowPosition) {
     const clamped = await clampToMonitor(
@@ -420,22 +423,37 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
   const BUBBLE_EXIT_MS = 400;
   const BUBBLE_TRANSIENT_VISIBLE_MS = 2500;
 
-  function applyCcEvent(eventName: string): void {
+  async function handleCcEvent(eventName: string): Promise<void> {
     const config = ccEventConfig[eventName];
     if (!config) return;
 
     behavior.forceState(config.state);
     animator.play(config.state);
 
-    // If switching from a persistent bubble, hard-cut (no exit animation)
-    if (bubble && bubble.config.persistent && config.persistent) {
-      bubble = { config, phase: 'visible', timer: 0 };
-      return;
+    // Try AI reaction first, fallback to static text
+    if (getConfig()) {
+      try {
+        const reaction = await invoke<string>('generate_event_reaction', { event: eventName });
+        bubble = {
+          config: { ...config, bubbleText: reaction },
+          phase: 'entering',
+          timer: BUBBLE_ENTER_MS,
+        };
+        return;
+      } catch {
+        // Fall through to static text
+      }
     }
 
-    bubble = { config, phase: 'entering', timer: BUBBLE_ENTER_MS };
+    // Static fallback
+    if (bubble && bubble.config.persistent && config.persistent) {
+      bubble = { config, phase: 'visible', timer: 0 };
+    } else {
+      bubble = { config, phase: 'entering', timer: BUBBLE_ENTER_MS };
+    }
   }
   let edgeRedirectCooldown = 0;
+  let aiIdleAccumulator = 0;
 
   behavior.on((nextState) => {
     animator.play(nextState);
@@ -486,6 +504,15 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
           }
         }
         break;
+      case 'aiSettings': {
+        const cfg = getConfig();
+        const newCfg = await showAiSettings(cfg);
+        if (newCfg) {
+          await invoke('set_ai_config', { config: newCfg });
+          setConfig(newCfg);
+        }
+        break;
+      }
       case 'installCcHooks':
         {
           const result = await invoke<{ success: boolean; error?: string }>('install_cc_hooks');
@@ -507,16 +534,55 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
 
   nativeMenu.on(handleMenuAction);
 
-  // CC Hook event listener
+  // CC Hook event listener with AI-powered reactions
   void listen<string>('cc-event', (event) => {
     try {
-      applyCcEvent(event.payload);
+      handleCcEvent(event.payload);
     } catch (err) {
       console.error('[app] cc-event error:', err);
     }
   });
 
   new Interactions(canvas, behavior);
+
+  // Click-to-chat: when AI configured, click pet to chat
+  let chatClickTimer = 0;
+  canvas.addEventListener('click', () => {
+    if (!getConfig()) return;
+    if (behavior.isDragging) return;
+    // Debounce: require 300ms between clicks
+    const now = performance.now();
+    if (now - chatClickTimer < 300) return;
+    chatClickTimer = now;
+
+    const msg = prompt('对宠物说话:');
+    if (!msg || !msg.trim()) return;
+
+    addToHistory('user', msg.trim());
+    const messages = buildMessages(msg.trim());
+    bubble = {
+      config: { state: 'review', bubbleText: '...', emoji: '💬', bgColor: '#e3f2fd', borderColor: '#90caf9', persistent: true },
+      phase: 'visible',
+      timer: 0,
+    };
+
+    invoke<string>('chat_with_pet', { messages })
+      .then((reply) => {
+        addToHistory('assistant', reply);
+        bubble = {
+          config: { state: 'review', bubbleText: reply, emoji: '😺', bgColor: '#e8f5e9', borderColor: '#81c784', persistent: false },
+          phase: 'entering',
+          timer: BUBBLE_ENTER_MS,
+        };
+      })
+      .catch((err) => {
+        bubble = {
+          config: { state: 'failed', bubbleText: String(err), emoji: '❌', bgColor: '#ffebee', borderColor: '#e57373', persistent: false },
+          phase: 'entering',
+          timer: BUBBLE_ENTER_MS,
+        };
+      });
+  });
 
   window.addEventListener('mouseup', () => {
     if (behavior.isDragging) return;
@@ -541,6 +607,30 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
       }
 
       behavior.tick(deltaMs);
+
+      // Idle AI chatter
+      const aiCfg = getConfig();
+      if (behavior.currentState === 'idle' && aiCfg?.idleChatEnabled && !bubble) {
+        aiIdleAccumulator += deltaMs;
+        const intervalMs = aiCfg.idleChatInterval * 1000;
+        if (aiIdleAccumulator >= intervalMs) {
+          aiIdleAccumulator = 0;
+          if (Math.random() < 0.1) {
+            invoke<string>('generate_event_reaction', { event: 'idle' })
+              .then((text) => {
+                if (bubble) return;
+                bubble = {
+                  config: { state: 'idle', bubbleText: text, emoji: '😺', bgColor: '#fff3e0', borderColor: '#ffb74d', persistent: false },
+                  phase: 'entering',
+                  timer: BUBBLE_ENTER_MS,
+                };
+              })
+              .catch(() => {});
+          }
+        }
+      } else if (behavior.currentState !== 'idle') {
+        aiIdleAccumulator = 0;
+      }
 
       // Apply roaming displacement after tick
       if (behavior.roamingActive) {
