@@ -120,15 +120,47 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct Preferences {
-    active_pet_id: String,
+    pub active_pet_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    window_position: Option<WindowPosition>,
+    pub window_position: Option<WindowPosition>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ai_config: Option<AiConfig>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct WindowPosition {
     x: i32,
     y: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AiConfig {
+    pub api_key: String,
+    #[serde(default = "default_base_url")]
+    pub base_url: String,
+    #[serde(default = "default_model")]
+    pub model: String,
+    #[serde(default = "default_system_prompt")]
+    pub system_prompt: String,
+    #[serde(default = "default_idle_chat_enabled")]
+    pub idle_chat_enabled: bool,
+    #[serde(default = "default_idle_chat_interval")]
+    pub idle_chat_interval: u64,
+}
+
+fn default_base_url() -> String { "https://api.deepseek.com".into() }
+fn default_model() -> String { "DeepSeek-V3".into() }
+fn default_system_prompt() -> String {
+    "你是一只可爱的桌面宠物猫，名叫小橘。你是主人的编程伙伴，用简短可爱的语气回应，每句话不超过30字。偶尔加个喵~".into()
+}
+fn default_idle_chat_enabled() -> bool { true }
+fn default_idle_chat_interval() -> u64 { 300 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
 }
 
 #[tauri::command]
@@ -156,6 +188,7 @@ fn load_preferences(app_handle: tauri::AppHandle) -> Preferences {
         return Preferences {
             active_pet_id: "cat".into(),
             window_position: None,
+            ai_config: None,
         };
     };
 
@@ -172,6 +205,7 @@ fn load_preferences(app_handle: tauri::AppHandle) -> Preferences {
                     Preferences {
                         active_pet_id: "cat".into(),
                         window_position: None,
+                        ai_config: None,
                     }
                 }
             }
@@ -181,6 +215,7 @@ fn load_preferences(app_handle: tauri::AppHandle) -> Preferences {
             Preferences {
                 active_pet_id: "cat".into(),
                 window_position: None,
+                ai_config: None,
             }
         }
     }
@@ -705,6 +740,7 @@ mod tests {
         let prefs = Preferences {
             active_pet_id: "cat".into(),
             window_position: None,
+            ai_config: None,
         };
         assert_eq!(prefs.active_pet_id, "cat");
         assert!(prefs.window_position.is_none());
@@ -715,6 +751,7 @@ mod tests {
         let prefs = Preferences {
             active_pet_id: "cat".into(),
             window_position: Some(WindowPosition { x: 100, y: 200 }),
+            ai_config: None,
         };
         let json = serde_json::to_string(&prefs).unwrap();
         let parsed: Preferences = serde_json::from_str(&json).unwrap();
