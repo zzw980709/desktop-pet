@@ -505,14 +505,19 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
         }
         break;
       case 'aiSettings': {
-        new WebviewWindow('ai-settings', {
-          url: 'ai-settings.html',
-          title: 'AI 设置',
-          width: 460,
-          height: 620,
-          resizable: false,
-          decorations: true,
-        });
+        const existing = await WebviewWindow.getByLabel('ai-settings');
+        if (existing) {
+          await existing.setFocus();
+        } else {
+          new WebviewWindow('ai-settings', {
+            url: 'ai-settings.html',
+            title: 'AI 设置',
+            width: 460,
+            height: 620,
+            resizable: false,
+            decorations: true,
+          });
+        }
         break;
       }
       case 'installCcHooks':
