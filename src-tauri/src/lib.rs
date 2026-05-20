@@ -258,7 +258,30 @@ fn save_preferences(app_handle: tauri::AppHandle, preferences: Preferences) -> R
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
 
-    let content = serde_json::to_string_pretty(&preferences).map_err(|e| e.to_string())?;
+    // Merge incoming preferences into existing file (read-modify-write)
+    let mut existing: serde_json::Value = if prefs_path.exists() {
+        fs::read_to_string(&prefs_path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_else(|| serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+
+    let incoming = serde_json::to_value(&preferences).unwrap_or_default();
+    if let Some(obj) = existing.as_object_mut() {
+        if let Some(incoming_obj) = incoming.as_object() {
+            for (key, value) in incoming_obj {
+                if value.is_null() {
+                    obj.remove(key);
+                } else {
+                    obj.insert(key.clone(), value.clone());
+                }
+            }
+        }
+    }
+
+    let content = serde_json::to_string_pretty(&existing).map_err(|e| e.to_string())?;
     fs::write(&prefs_path, content).map_err(|e| e.to_string())?;
     info!("saved preferences: activePetId={}", preferences.active_pet_id);
 
