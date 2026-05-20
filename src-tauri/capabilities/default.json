@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main", "ai-settings", "pet-import"],
+  "windows": ["main", "ai-settings", "pet-import", "chat"],
   "permissions": [
     "core:default",
     "opener:default",

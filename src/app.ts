@@ -12,7 +12,7 @@ import type { MenuAction } from './ui/menu-model';
 import { CELL_HEIGHT, CELL_WIDTH } from './pets/contract';
 import { discoverPets } from './pets/catalog';
 import type { PetCatalogEntry, PetState, Preferences } from './types';
-import { setConfig, getConfig, buildMessages, addToHistory } from './ai/chat';
+import { setConfig, getConfig } from './ai/chat';
 
 const DRAG_ANIMATED_STATES = new Set(['running-right', 'running-left']);
 const EDGE_DETECT_MARGIN = 40;
@@ -428,26 +428,10 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
   canvas.addEventListener('click', () => {
     if (!getConfig()) return;
     if (behavior.isDragging) return;
-    // Debounce: require 300ms between clicks
     const now = performance.now();
     if (now - chatClickTimer < 300) return;
     chatClickTimer = now;
-
-    const msg = prompt('对宠物说话:');
-    if (!msg || !msg.trim()) return;
-
-    addToHistory('user', msg.trim());
-    const messages = buildMessages(msg.trim());
-    showBubble({ state: 'review', bubbleText: '...', emoji: '💬', bgColor: '#e3f2fd', borderColor: '#90caf9', persistent: true });
-
-    invoke<string>('chat_with_pet', { messages })
-      .then((reply) => {
-        addToHistory('assistant', reply);
-        showBubble({ state: 'review', bubbleText: reply, emoji: '😺', bgColor: '#e8f5e9', borderColor: '#81c784', persistent: false });
-      })
-      .catch((err) => {
-        showBubble({ state: 'failed', bubbleText: String(err), emoji: '❌', bgColor: '#ffebee', borderColor: '#e57373', persistent: false });
-      });
+    void invoke('open_chat_window');
   });
 
   window.addEventListener('mouseup', () => {

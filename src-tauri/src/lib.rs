@@ -811,6 +811,19 @@ async fn chat_with_pet(
 }
 
 #[tauri::command]
+async fn chat_with_pet_stream(
+    app_handle: tauri::AppHandle,
+    messages: Vec<ChatMessage>,
+) -> Result<String, String> {
+    let config = {
+        let state = app_handle.state::<Mutex<Connection>>();
+        let db = state.lock().unwrap();
+        read_ai_config(&db).ok_or("AI 未配置，请在 AI 设置中输入 API Key".to_string())?
+    };
+    ai::chat_stream(&config, &messages, 60, &app_handle).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn generate_event_reaction(
     app_handle: tauri::AppHandle,
     event: String,
@@ -903,6 +916,44 @@ fn load_chat_history(app_handle: tauri::AppHandle) -> Vec<ChatHistoryEntry> {
         Ok(iter) => iter.filter_map(|r| r.ok()).collect(),
         Err(_) => vec![],
     }
+}
+
+#[tauri::command]
+fn open_chat_window(app_handle: tauri::AppHandle) {
+    if let Some(win) = app_handle.get_webview_window("chat") {
+        let _ = win.show();
+        let _ = win.set_focus();
+        return;
+    }
+
+    let mut x = 100.0;
+    let mut y = 100.0;
+    if let Some(main_win) = app_handle.get_webview_window("main") {
+        if let Ok(pos) = main_win.outer_position() {
+            if let Ok(size) = main_win.outer_size() {
+                let scale = main_win.scale_factor().unwrap_or(1.0);
+                let main_right = pos.x as f64 / scale + size.width as f64 / scale;
+                x = main_right + 8.0;
+                y = pos.y as f64 / scale;
+                if x + 340.0 > 1920.0 {
+                    x = pos.x as f64 / scale - 348.0;
+                }
+                if x < 0.0 { x = 100.0; }
+            }
+        }
+    }
+
+    let _ = tauri::WebviewWindowBuilder::new(
+        &app_handle,
+        "chat",
+        tauri::WebviewUrl::App("chat.html".into()),
+    )
+    .title("聊天")
+    .inner_size(340.0, 440.0)
+    .position(x, y)
+    .resizable(false)
+    .skip_taskbar(true)
+    .build();
 }
 
 #[tauri::command]
@@ -1021,10 +1072,12 @@ pub fn run() {
             get_ai_config,
             set_ai_config,
             chat_with_pet,
+            chat_with_pet_stream,
             generate_event_reaction,
             test_ai_connection,
             open_ai_settings_window,
             open_pet_import_window,
+            open_chat_window,
             show_bubble_window,
             hide_bubble_window,
             sync_bubble_position,

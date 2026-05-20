@@ -18,6 +18,7 @@ export default defineConfig(async () => ({
         'ai-settings': 'ai-settings.html',
         'pet-import': 'pet-import.html',
         bubble: 'bubble.html',
+        chat: 'chat.html',
       },
     },
   },
