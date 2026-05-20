@@ -8,6 +8,7 @@ use tracing_appender::rolling::RollingFileAppender;
 
 mod pets;
 mod cc_hooks;
+mod ai;
 
 const BUILTIN_PET_ID: &str = "cat";
 const BUILTIN_MANIFEST: &str = include_str!("../resources/cat/pet.json");
