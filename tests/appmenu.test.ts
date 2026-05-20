@@ -37,15 +37,15 @@ describe('NativeAppMenu', () => {
 
     expect(menuNew).toHaveBeenCalledTimes(1);
     const options = menuNew.mock.calls[0]?.[0] as { items: Array<{ text: string; items?: Array<{ text?: string; enabled?: boolean }> }> };
-    expect(options.items.map((item) => item.text)).toEqual(['桌面宠物', '动作', '切换宠物', '管理']);
-    expect(options.items[1]?.items?.map((item) => item.text)).toEqual(STATE_ITEMS.map((item) => item.label));
-    expect(options.items[2]?.items).toEqual(
+    expect(options.items.map((item) => item.text)).toEqual(['桌面宠物', '编辑', '动作', '切换宠物', '管理']);
+    expect(options.items[2]?.items?.map((item) => item.text)).toEqual(STATE_ITEMS.map((item) => item.label));
+    expect(options.items[3]?.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ text: '当前：小猫', enabled: false }),
         expect.objectContaining({ text: '狐狸', enabled: true }),
       ]),
     );
-    expect(options.items[3]?.items).toEqual(
+    expect(options.items[4]?.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ text: '添加宠物...', enabled: true }),
       ]),
@@ -67,7 +67,7 @@ describe('NativeAppMenu', () => {
     const options = menuNew.mock.calls[0]?.[0] as {
       items: Array<{ text: string; items?: Array<{ text?: string; id?: string }> }>;
     };
-    const manageItems = options.items[3]?.items ?? [];
+    const manageItems = options.items[4]?.items ?? [];
     expect(manageItems).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ text: '添加宠物...' }),
@@ -89,7 +89,7 @@ describe('NativeAppMenu', () => {
     const options = menuNew.mock.calls[0]?.[0] as {
       items: Array<{ items?: Array<{ id?: string; action?: () => void }> }>;
     };
-    const manageItems = options.items[3]?.items ?? [];
+    const manageItems = options.items[4]?.items ?? [];
     manageItems.find((item) => item.id === 'add-pet')?.action?.();
 
     expect(handler).toHaveBeenCalledWith({ type: 'addPet' });

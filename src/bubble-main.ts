@@ -1,5 +1,3 @@
-import { listen } from '@tauri-apps/api/event';
-
 interface BubbleData {
   text: string;
   emoji: string;
@@ -9,13 +7,8 @@ interface BubbleData {
 
 const wrap = document.getElementById('bubble-wrap')!;
 const body = document.getElementById('bubble-body')!;
-let hideTimer: ReturnType<typeof setTimeout> | null = null;
 
 function showBubble(data: BubbleData): void {
-  if (hideTimer) {
-    clearTimeout(hideTimer);
-    hideTimer = null;
-  }
   body.textContent = `${data.emoji} ${data.text}`;
   body.style.background = data.bgColor;
   body.style.borderColor = data.borderColor;
@@ -27,10 +20,11 @@ function hideBubble(): void {
   wrap.classList.remove('show');
 }
 
-void listen<BubbleData | null>('bubble-update', (event) => {
-  if (event.payload) {
-    showBubble(event.payload);
+// Called from Rust via eval
+(window as unknown as Record<string, unknown>).bubbleUpdate = (data: BubbleData | null) => {
+  if (data) {
+    showBubble(data);
   } else {
     hideBubble();
   }
-});
+};

@@ -28,6 +28,19 @@ export class NativeAppMenu {
           items: this.buildDesktopPetItems(),
         } satisfies SubmenuOptions,
         {
+          id: 'edit',
+          text: '编辑',
+          items: [
+            { item: 'Undo' },
+            { item: 'Redo' },
+            { item: 'Separator' },
+            { item: 'Cut' },
+            { item: 'Copy' },
+            { item: 'Paste' },
+            { item: 'SelectAll' },
+          ],
+        } satisfies SubmenuOptions,
+        {
           id: 'actions',
           text: '动作',
           items: this.buildStateItems(),
