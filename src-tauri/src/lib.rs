@@ -1,5 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
+use rusqlite::Connection;
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 use tracing::{error, info, warn};
@@ -19,10 +21,6 @@ fn app_pets_dir(app_data: &PathBuf) -> PathBuf {
     app_data.join("pets")
 }
 
-fn preferences_path(app_data: &PathBuf) -> PathBuf {
-    app_data.join("preferences.json")
-}
-
 fn init_builtin_pet(app_data: &PathBuf) {
     let pets_dir = app_pets_dir(app_data);
     let cat_dir = pets_dir.join(BUILTIN_PET_ID);
@@ -38,36 +36,79 @@ fn init_builtin_pet(app_data: &PathBuf) {
     let _ = fs::write(cat_dir.join("spritesheet.webp"), BUILTIN_SPRITESHEET);
 }
 
-fn init_preferences(app_data: &PathBuf) {
-    let prefs_path = preferences_path(app_data);
-    if prefs_path.exists() {
-        // Validate existing preferences; if corrupted, back up and rewrite
-        match fs::read_to_string(&prefs_path) {
-            Ok(content) => {
-                if serde_json::from_str::<serde_json::Value>(&content).is_ok() {
-                    info!("preferences.json exists and is valid");
-                    return;
+fn init_database(app_data: &PathBuf) -> Connection {
+    let db_path = app_data.join("desktop-pet.db");
+    let conn = Connection::open(&db_path).expect("failed to open database");
+
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS preferences (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            active_pet_id TEXT NOT NULL DEFAULT 'cat',
+            window_x INTEGER,
+            window_y INTEGER
+        );
+        INSERT OR IGNORE INTO preferences (id) VALUES (1);
+
+        CREATE TABLE IF NOT EXISTS ai_config (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            api_key TEXT NOT NULL DEFAULT '',
+            base_url TEXT NOT NULL DEFAULT 'https://api.deepseek.com',
+            model TEXT NOT NULL DEFAULT 'DeepSeek-V3',
+            system_prompt TEXT NOT NULL DEFAULT '你是一只可爱的桌面宠物猫，名叫小橘。你是主人的编程伙伴，用简短可爱的语气回应，每句话不超过30字。偶尔加个喵~',
+            idle_chat_enabled INTEGER NOT NULL DEFAULT 1,
+            idle_chat_interval INTEGER NOT NULL DEFAULT 300
+        );
+        INSERT OR IGNORE INTO ai_config (id) VALUES (1);
+
+        CREATE TABLE IF NOT EXISTS chat_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );"
+    ).expect("failed to create tables");
+
+    // Migrate from old preferences.json
+    let json_path = app_data.join("preferences.json");
+    if json_path.exists() {
+        info!("migrating from preferences.json to SQLite");
+        if let Ok(content) = fs::read_to_string(&json_path) {
+            if let Ok(prefs) = serde_json::from_str::<serde_json::Value>(&content) {
+                let pet_id = prefs.get("activePetId").and_then(|v| v.as_str()).unwrap_or("cat");
+                if let Some(pos) = prefs.get("windowPosition") {
+                    let x = pos.get("x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+                    let y = pos.get("y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+                    let _ = conn.execute(
+                        "UPDATE preferences SET active_pet_id = ?1, window_x = ?2, window_y = ?3 WHERE id = 1",
+                        rusqlite::params![pet_id, x, y],
+                    );
+                } else {
+                    let _ = conn.execute(
+                        "UPDATE preferences SET active_pet_id = ?1 WHERE id = 1",
+                        rusqlite::params![pet_id],
+                    );
                 }
-                warn!("preferences.json is corrupted, backing up and resetting");
-                let backup = app_data.join("preferences.json.bak");
-                let _ = fs::write(&backup, &content);
-            }
-            Err(e) => {
-                warn!("failed to read preferences.json: {}, resetting", e);
+                if let Some(ai) = prefs.get("aiConfig") {
+                    let ac = AiConfig {
+                        api_key: ai.get("apiKey").and_then(|v| v.as_str()).unwrap_or("").into(),
+                        base_url: ai.get("baseUrl").and_then(|v| v.as_str()).unwrap_or("https://api.deepseek.com").into(),
+                        model: ai.get("model").and_then(|v| v.as_str()).unwrap_or("DeepSeek-V3").into(),
+                        system_prompt: ai.get("systemPrompt").and_then(|v| v.as_str()).unwrap_or("").into(),
+                        idle_chat_enabled: ai.get("idleChatEnabled").and_then(|v| v.as_bool()).unwrap_or(true),
+                        idle_chat_interval: ai.get("idleChatInterval").and_then(|v| v.as_u64()).unwrap_or(300),
+                    };
+                    let _ = conn.execute(
+                        "UPDATE ai_config SET api_key=?1, base_url=?2, model=?3, system_prompt=?4, idle_chat_enabled=?5, idle_chat_interval=?6 WHERE id=1",
+                        rusqlite::params![ac.api_key, ac.base_url, ac.model, ac.system_prompt, ac.idle_chat_enabled as i32, ac.idle_chat_interval as i64],
+                    );
+                }
             }
         }
-    } else {
-        info!("preferences.json not found, creating default");
+        let _ = fs::remove_file(&json_path);
+        info!("migration complete, removed preferences.json");
     }
 
-    let default_prefs = serde_json::json!({
-        "activePetId": "cat",
-    });
-
-    if let Some(parent) = prefs_path.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-    let _ = fs::write(&prefs_path, default_prefs.to_string());
+    conn
 }
 
 fn init_logging(app_data: &PathBuf) {
@@ -102,7 +143,8 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     info!("app data directory: {:?}", app_data);
 
     init_builtin_pet(&app_data);
-    init_preferences(&app_data);
+    let db_conn = init_database(&app_data);
+    app.manage(Mutex::new(db_conn));
 
     // Auto-install CC hooks on startup
     if let Err(e) = install_cc_hooks_internal() {
@@ -135,6 +177,23 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     info!("application setup complete");
     Ok(())
+}
+
+fn read_ai_config(db: &Connection) -> Option<AiConfig> {
+    db.query_row(
+        "SELECT api_key, base_url, model, system_prompt, idle_chat_enabled, idle_chat_interval FROM ai_config WHERE id=1",
+        [],
+        |row| {
+            Ok(AiConfig {
+                api_key: row.get(0)?,
+                base_url: row.get(1)?,
+                model: row.get(2)?,
+                system_prompt: row.get(3)?,
+                idle_chat_enabled: row.get::<_, i32>(4)? != 0,
+                idle_chat_interval: row.get::<_, i64>(5)? as u64,
+            })
+        },
+    ).ok()
 }
 
 use serde::{Deserialize, Serialize};
@@ -205,86 +264,45 @@ fn discover_pets(app_handle: tauri::AppHandle) -> Vec<pets::ExternalPetRecord> {
 
 #[tauri::command]
 fn load_preferences(app_handle: tauri::AppHandle) -> Preferences {
-    let Ok(app_data) = app_handle.path().app_data_dir() else {
-        error!("failed to get app_data dir when loading preferences");
-        return Preferences {
-            active_pet_id: "cat".into(),
-            window_position: None,
-            ai_config: None,
-        };
-    };
-
-    let prefs_path = preferences_path(&app_data);
-    match fs::read_to_string(&prefs_path) {
-        Ok(content) => {
-            match serde_json::from_str::<Preferences>(&content) {
-                Ok(prefs) => {
-                    info!("loaded preferences: activePetId={}", prefs.active_pet_id);
-                    prefs
-                }
-                Err(e) => {
-                    warn!("failed to parse preferences.json: {}, using defaults", e);
-                    Preferences {
-                        active_pet_id: "cat".into(),
-                        window_position: None,
-                        ai_config: None,
-                    }
-                }
-            }
-        }
-        Err(e) => {
-            warn!("failed to read preferences.json: {}, using defaults", e);
-            Preferences {
-                active_pet_id: "cat".into(),
-                window_position: None,
+    let state = app_handle.state::<Mutex<Connection>>();
+    let db = state.lock().unwrap();
+    let prefs = db.query_row(
+        "SELECT active_pet_id, window_x, window_y FROM preferences WHERE id = 1",
+        [],
+        |row| {
+            let pet_id: String = row.get(0)?;
+            let wx: Option<i32> = row.get(1)?;
+            let wy: Option<i32> = row.get(2)?;
+            Ok(Preferences {
+                active_pet_id: pet_id,
+                window_position: match (wx, wy) {
+                    (Some(x), Some(y)) => Some(WindowPosition { x, y }),
+                    _ => None,
+                },
                 ai_config: None,
-            }
-        }
-    }
+            })
+        },
+    ).unwrap_or(Preferences { active_pet_id: "cat".into(), window_position: None, ai_config: None });
+
+    let ai_config = read_ai_config(&db);
+    Preferences { ai_config, ..prefs }
 }
 
 #[tauri::command]
 fn save_preferences(app_handle: tauri::AppHandle, preferences: Preferences) -> Result<(), String> {
-    let app_data = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| {
-            error!("failed to get app_data dir when saving preferences: {}", e);
-            e.to_string()
-        })?;
-
-    let prefs_path = preferences_path(&app_data);
-    if let Some(parent) = prefs_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-
-    // Merge incoming preferences into existing file (read-modify-write)
-    let mut existing: serde_json::Value = if prefs_path.exists() {
-        fs::read_to_string(&prefs_path)
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_else(|| serde_json::json!({}))
+    let state = app_handle.state::<Mutex<Connection>>();
+    let db = state.lock().unwrap();
+    if let Some(pos) = &preferences.window_position {
+        db.execute(
+            "UPDATE preferences SET active_pet_id = ?1, window_x = ?2, window_y = ?3 WHERE id = 1",
+            rusqlite::params![preferences.active_pet_id, pos.x, pos.y],
+        ).map_err(|e| e.to_string())?;
     } else {
-        serde_json::json!({})
-    };
-
-    let incoming = serde_json::to_value(&preferences).unwrap_or_default();
-    if let Some(obj) = existing.as_object_mut() {
-        if let Some(incoming_obj) = incoming.as_object() {
-            for (key, value) in incoming_obj {
-                if value.is_null() {
-                    obj.remove(key);
-                } else {
-                    obj.insert(key.clone(), value.clone());
-                }
-            }
-        }
+        db.execute(
+            "UPDATE preferences SET active_pet_id = ?1 WHERE id = 1",
+            rusqlite::params![preferences.active_pet_id],
+        ).map_err(|e| e.to_string())?;
     }
-
-    let content = serde_json::to_string_pretty(&existing).map_err(|e| e.to_string())?;
-    fs::write(&prefs_path, content).map_err(|e| e.to_string())?;
-    info!("saved preferences: activePetId={}", preferences.active_pet_id);
-
     Ok(())
 }
 
@@ -763,32 +781,20 @@ fn uninstall_cc_hooks() -> CcHookResult {
 
 #[tauri::command]
 async fn get_ai_config(app_handle: tauri::AppHandle) -> Option<AiConfig> {
-    let Ok(app_data) = app_handle.path().app_data_dir() else { return None };
-    let prefs_path = preferences_path(&app_data);
-    let content = fs::read_to_string(&prefs_path).ok()?;
-    let prefs = serde_json::from_str::<Preferences>(&content).ok()?;
-    prefs.ai_config
+    let state = app_handle.state::<Mutex<Connection>>();
+    let db = state.lock().unwrap();
+    read_ai_config(&db)
 }
 
 #[tauri::command]
 async fn set_ai_config(app_handle: tauri::AppHandle, config: AiConfig) -> Result<(), String> {
-    let app_data = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
-    let prefs_path = preferences_path(&app_data);
-    let mut prefs: Preferences = if prefs_path.exists() {
-        fs::read_to_string(&prefs_path)
-            .ok()
-            .and_then(|c| serde_json::from_str(&c).ok())
-            .unwrap_or(Preferences {
-                active_pet_id: "cat".into(),
-                window_position: None,
-                ai_config: None,
-            })
-    } else {
-        Preferences { active_pet_id: "cat".into(), window_position: None, ai_config: None }
-    };
-    prefs.ai_config = Some(config);
-    let content = serde_json::to_string_pretty(&prefs).map_err(|e| e.to_string())?;
-    fs::write(&prefs_path, content).map_err(|e| e.to_string())
+    let state = app_handle.state::<Mutex<Connection>>();
+    let db = state.lock().unwrap();
+    db.execute(
+        "UPDATE ai_config SET api_key=?1, base_url=?2, model=?3, system_prompt=?4, idle_chat_enabled=?5, idle_chat_interval=?6 WHERE id=1",
+        rusqlite::params![config.api_key, config.base_url, config.model, config.system_prompt, config.idle_chat_enabled as i32, config.idle_chat_interval as i64],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -796,13 +802,11 @@ async fn chat_with_pet(
     app_handle: tauri::AppHandle,
     messages: Vec<ChatMessage>,
 ) -> Result<String, String> {
-    let app_data = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
-    let prefs_path = preferences_path(&app_data);
-    let prefs: Preferences = fs::read_to_string(&prefs_path)
-        .ok()
-        .and_then(|c| serde_json::from_str(&c).ok())
-        .unwrap_or(Preferences { active_pet_id: "cat".into(), window_position: None, ai_config: None });
-    let config = prefs.ai_config.ok_or("AI 未配置，请在 AI 设置中输入 API Key".to_string())?;
+    let config = {
+        let state = app_handle.state::<Mutex<Connection>>();
+    let db = state.lock().unwrap();
+        read_ai_config(&db).ok_or("AI 未配置，请在 AI 设置中输入 API Key".to_string())?
+    };
     ai::chat(&config, &messages, 30).await.map_err(|e| e.to_string())
 }
 
@@ -811,27 +815,26 @@ async fn generate_event_reaction(
     app_handle: tauri::AppHandle,
     event: String,
 ) -> Result<String, String> {
-    let app_data = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
-    let prefs_path = preferences_path(&app_data);
-    let prefs: Preferences = fs::read_to_string(&prefs_path)
-        .ok()
-        .and_then(|c| serde_json::from_str(&c).ok())
-        .unwrap_or(Preferences { active_pet_id: "cat".into(), window_position: None, ai_config: None });
-    let config = prefs.ai_config.ok_or("no config".to_string())?;
+    let (config, user_msg) = {
+        let state = app_handle.state::<Mutex<Connection>>();
+    let db = state.lock().unwrap();
+        let config = read_ai_config(&db).ok_or("no config".to_string())?;
 
-    let desc_map: HashMap<&str, &str> = [
-        ("thinking", "主人正在认真思考"),
-        ("tool-bash", "主人正在运行命令行"),
-        ("tool-edit", "主人正在编辑代码"),
-        ("tool-write", "主人正在写文件"),
-        ("tool-web", "主人正在浏览网页"),
-        ("waiting", "主人在等待授权操作"),
-        ("context-compacted", "对话刚被压缩了"),
-        ("completion", "主人刚完成了任务"),
-    ].into_iter().collect();
+        let desc_map: HashMap<&str, &str> = [
+            ("thinking", "主人正在认真思考"),
+            ("tool-bash", "主人正在运行命令行"),
+            ("tool-edit", "主人正在编辑代码"),
+            ("tool-write", "主人正在写文件"),
+            ("tool-web", "主人正在浏览网页"),
+            ("waiting", "主人在等待授权操作"),
+            ("context-compacted", "对话刚被压缩了"),
+            ("completion", "主人刚完成了任务"),
+        ].into_iter().collect();
 
-    let desc = desc_map.get(event.as_str()).copied().unwrap_or("主人在做点什么");
-    let user_msg = format!("你注意到主人正在：{}，请你随口说一句简短的反应（不超过20字）", desc);
+        let desc = desc_map.get(event.as_str()).copied().unwrap_or("主人在做点什么");
+        let user_msg = format!("你注意到主人正在：{}，请你随口说一句简短的反应（不超过20字）", desc);
+        (config, user_msg)
+    };
 
     let system_prompt = config.system_prompt.clone();
     let messages = vec![
@@ -857,6 +860,48 @@ async fn test_ai_connection(
 fn check_cc_hooks_status() -> CcHookStatus {
     CcHookStatus {
         installed: cc_hooks_dir().join("notify.sh").exists(),
+    }
+}
+
+#[tauri::command]
+fn save_chat_message(app_handle: tauri::AppHandle, role: String, content: String) -> Result<(), String> {
+    let state = app_handle.state::<Mutex<Connection>>();
+    let db = state.lock().unwrap();
+    db.execute(
+        "INSERT INTO chat_history (role, content) VALUES (?1, ?2)",
+        rusqlite::params![role, content],
+    ).map_err(|e| e.to_string())?;
+    // Keep only last 10 messages
+    db.execute(
+        "DELETE FROM chat_history WHERE id NOT IN (SELECT id FROM chat_history ORDER BY id DESC LIMIT 10)",
+        [],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ChatHistoryEntry {
+    role: String,
+    content: String,
+}
+
+#[tauri::command]
+fn load_chat_history(app_handle: tauri::AppHandle) -> Vec<ChatHistoryEntry> {
+    let state = app_handle.state::<Mutex<Connection>>();
+    let db = state.lock().unwrap();
+    let mut stmt = match db.prepare("SELECT role, content FROM chat_history ORDER BY id ASC") {
+        Ok(s) => s,
+        Err(_) => return vec![],
+    };
+    let rows = stmt.query_map([], |row| {
+        Ok(ChatHistoryEntry {
+            role: row.get(0)?,
+            content: row.get(1)?,
+        })
+    });
+    match rows {
+        Ok(iter) => iter.filter_map(|r| r.ok()).collect(),
+        Err(_) => vec![],
     }
 }
 
@@ -983,6 +1028,8 @@ pub fn run() {
             show_bubble_window,
             hide_bubble_window,
             sync_bubble_position,
+            save_chat_message,
+            load_chat_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
