@@ -530,6 +530,11 @@ struct CcHookResult {
     error: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct CcHookStatus {
+    installed: bool,
+}
+
 fn install_cc_hooks_internal() -> Result<(), String> {
     let settings_path = cc_settings_path();
 
@@ -806,6 +811,13 @@ async fn test_ai_connection(
 }
 
 #[tauri::command]
+fn check_cc_hooks_status() -> CcHookStatus {
+    CcHookStatus {
+        installed: cc_hooks_dir().join("notify.sh").exists(),
+    }
+}
+
+#[tauri::command]
 fn open_ai_settings_window(app_handle: tauri::AppHandle) {
     let win = app_handle.get_webview_window("ai-settings");
     if let Some(w) = win {
@@ -856,6 +868,7 @@ pub fn run() {
             remove_pet,
             install_cc_hooks,
             uninstall_cc_hooks,
+            check_cc_hooks_status,
             get_ai_config,
             set_ai_config,
             chat_with_pet,

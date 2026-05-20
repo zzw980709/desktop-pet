@@ -137,5 +137,59 @@ saveBtn.addEventListener('click', async () => {
   }
 });
 
+const hooksDot = document.getElementById('ai-hooks-dot')!;
+const hooksText = document.getElementById('ai-hooks-text')!;
+const hooksBtn = document.getElementById('ai-hooks-btn')! as HTMLButtonElement;
+
+let hooksInstalled = false;
+
+function updateHooksUI(): void {
+  if (hooksInstalled) {
+    hooksDot.className = 'ai-status-dot connected';
+    hooksText.textContent = '已安装';
+    hooksBtn.textContent = '卸载 CC Hooks';
+    hooksBtn.className = 'ai-hooks-btn uninstall';
+  } else {
+    hooksDot.className = 'ai-status-dot';
+    hooksText.textContent = '未安装';
+    hooksBtn.textContent = '安装 CC Hooks';
+    hooksBtn.className = 'ai-hooks-btn install';
+  }
+}
+
+async function checkHooksStatus(): Promise<void> {
+  try {
+    const status = await invoke<{ installed: boolean }>('check_cc_hooks_status');
+    hooksInstalled = status.installed;
+  } catch {
+    hooksInstalled = false;
+  }
+  updateHooksUI();
+  hooksBtn.disabled = false;
+}
+
+hooksBtn.addEventListener('click', async () => {
+  hooksBtn.disabled = true;
+  hooksBtn.textContent = hooksInstalled ? '卸载中...' : '安装中...';
+  try {
+    const result = await invoke<{ success: boolean; error?: string }>(
+      hooksInstalled ? 'uninstall_cc_hooks' : 'install_cc_hooks'
+    );
+    if (result.success) {
+      setStatus(hooksInstalled ? 'CC Hooks 已卸载' : 'CC Hooks 已安装', true);
+      await checkHooksStatus();
+    } else {
+      setStatus(result.error ?? '操作失败', false);
+      hooksBtn.disabled = false;
+      updateHooksUI();
+    }
+  } catch (e) {
+    setStatus(String(e), false);
+    hooksBtn.disabled = false;
+    updateHooksUI();
+  }
+});
+
 // Init
 fillForm();
+checkHooksStatus();

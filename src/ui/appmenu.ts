@@ -118,19 +118,6 @@ export class NativeAppMenu {
         enabled: true,
         action: () => this.emit({ type: 'aiSettings' }),
       },
-      { item: 'Separator' },
-      {
-        id: 'install-cc-hooks',
-        text: '安装 CC Hooks',
-        enabled: true,
-        action: () => this.emit({ type: 'installCcHooks' }),
-      },
-      {
-        id: 'uninstall-cc-hooks',
-        text: '卸载 CC Hooks',
-        enabled: true,
-        action: () => this.emit({ type: 'uninstallCcHooks' }),
-      },
     ];
 
     const currentPet = this.pets.find((p) => p.id === this.currentPetId);

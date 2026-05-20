@@ -61,6 +61,7 @@
         outline: none;
         box-sizing: border-box;
         font-family: inherit;
+        user-select: text;
       }
       .ai-settings-field textarea {
         resize: vertical;
@@ -216,6 +217,36 @@
         border: 1px solid rgba(243,139,168,0.2);
         color: #f38ba8;
       }
+      .ai-hooks-status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: #cdd6f4;
+      }
+      .ai-hooks-btn {
+        width: 100%;
+        padding: 10px 16px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s;
+        border: 1px solid #45475a;
+        background: #313244;
+        color: #cdd6f4;
+        font-family: inherit;
+      }
+      .ai-hooks-btn.install {
+        background: linear-gradient(135deg, #4fc3f7, #7c4dff);
+        color: #fff;
+        border: none;
+        font-weight: 600;
+      }
+      .ai-hooks-btn.uninstall {
+        border-color: #f38ba8;
+        color: #f38ba8;
+      }
     </style>
     <title>AI 设置</title>
   </head>
@@ -274,6 +305,17 @@
           <input id="ai-interval-input" type="number" value="300" min="60" max="3600" />
           <span class="ai-interval-unit">秒</span>
           <span id="ai-interval-hint" class="ai-field-hint">约 5 分钟</span>
+        </div>
+      </div>
+      <div class="ai-settings-divider"></div>
+      <div class="ai-settings-field">
+        <label>Claude Code Hooks</label>
+        <div class="ai-hooks-status" id="ai-hooks-status">
+          <span id="ai-hooks-dot" class="ai-status-dot"></span>
+          <span id="ai-hooks-text">检查中...</span>
+        </div>
+        <div style="margin-top: 8px;">
+          <button id="ai-hooks-btn" class="ai-hooks-btn" disabled>检查中...</button>
         </div>
       </div>
       <div class="ai-settings-actions">

@@ -374,22 +374,6 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
       case 'aiSettings':
         void invoke('open_ai_settings_window');
         break;
-      case 'installCcHooks':
-        {
-          const result = await invoke<{ success: boolean; error?: string }>('install_cc_hooks');
-          if (!result.success && result.error) {
-            console.warn('[app] install CC hooks failed:', result.error);
-          }
-        }
-        break;
-      case 'uninstallCcHooks':
-        {
-          const result = await invoke<{ success: boolean; error?: string }>('uninstall_cc_hooks');
-          if (!result.success && result.error) {
-            console.warn('[app] uninstall CC hooks failed:', result.error);
-          }
-        }
-        break;
     }
   }
 

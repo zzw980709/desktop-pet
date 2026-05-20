@@ -17,8 +17,6 @@ export type MenuAction =
   | { type: 'addPet' }
   | { type: 'removePet'; petId: string }
   | { type: 'aiSettings' }
-  | { type: 'installCcHooks' }
-  | { type: 'uninstallCcHooks' }
 
 export const STATE_ITEMS = [
   { label: '挥手', action: 'waving' },
