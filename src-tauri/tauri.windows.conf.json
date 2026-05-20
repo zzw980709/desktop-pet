@@ -1,0 +1,13 @@
+{
+  "identifier": "com.desktop-pet.app",
+  "bundle": {
+    "windows": {
+      "digestAlgorithm": "sha256",
+      "nsis": {
+        "languages": ["English", "SimpChinese"],
+        "installMode": "both",
+        "displayLanguageSelector": true
+      }
+    }
+  }
+}

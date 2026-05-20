@@ -1,4 +1,4 @@
 pub mod classifier;
-pub mod monitor;
+pub mod keyboard;
 
-pub use monitor::BongoMonitor;
+pub use keyboard::start_keyboard_listening;

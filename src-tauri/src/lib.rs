@@ -2,11 +2,11 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
+use bongo::start_keyboard_listening;
 use tracing::{error, info, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use tracing_appender::rolling::RollingFileAppender;
 
-use bongo::BongoMonitor;
 mod bongo;
 mod pets;
 mod cc_hooks;
@@ -104,16 +104,14 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     init_builtin_pet(&app_data);
     init_preferences(&app_data);
 
-    // Initialize bongo keyboard monitor (always on)
-    let bongo_monitor = BongoMonitor::new(app.handle().clone());
-    if let Err(e) = bongo_monitor.set_active(true) {
-        info!("bongo monitor not available (permissions): {}", e);
+    // Start keyboard listening via rdev (cross-platform)
+    if let Err(e) = bongo::start_keyboard_listening(app.handle().clone()) {
+        warn!("keyboard listening failed to start: {}", e);
     }
-    app.manage(bongo_monitor);
 
-    // CC hook server disabled for debugging
-    // let cc_server = cc_hooks::CcHookServer::start(app.handle().clone());
-    // app.manage(cc_server);
+    // CC hook server for Claude Code integration
+    let cc_server = cc_hooks::CcHookServer::start(app.handle().clone());
+    app.manage(cc_server);
 
     info!("application setup complete");
     Ok(())
@@ -474,11 +472,10 @@ curl -s -X POST "http://127.0.0.1:PORT/event" \
 "#;
 
 const HOOK_EVENTS: &[(&str, &str)] = &[
-    ("after-model-request", "thinking"),
-    ("after-tool-invoke", "tool-calling"),
-    ("before-permission-request", "waiting"),
-    ("after-compaction", "context-compacted"),
-    ("after-session-finish", "completion"),
+    ("PostToolUse", "tool-calling"),
+    ("PermissionRequest", "waiting"),
+    ("PostCompact", "context-compacted"),
+    ("SessionEnd", "completion"),
 ];
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -684,15 +681,8 @@ fn uninstall_cc_hooks() -> CcHookResult {
 }
 
 #[tauri::command]
-fn set_bongo_active(monitor: tauri::State<'_, BongoMonitor>, active: bool) -> Result<(), String> {
-    monitor.set_active(active)
-}
-
-#[tauri::command]
-fn open_accessibility_settings() {
-    let _ = std::process::Command::new("open")
-        .args(["x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"])
-        .spawn();
+fn retry_keyboard_listening(app_handle: tauri::AppHandle) -> Result<(), String> {
+    start_keyboard_listening(app_handle)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -710,8 +700,7 @@ pub fn run() {
             remove_pet,
             install_cc_hooks,
             uninstall_cc_hooks,
-            set_bongo_active,
-            open_accessibility_settings
+            retry_keyboard_listening
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

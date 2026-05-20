@@ -1,0 +1,13 @@
+{
+  "identifier": "com.desktop-pet.app",
+  "bundle": {
+    "linux": {
+      "deb": {
+        "depends": []
+      },
+      "rpm": {
+        "depends": []
+      }
+    }
+  }
+}

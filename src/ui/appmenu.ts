@@ -124,6 +124,13 @@ export class NativeAppMenu {
         enabled: true,
         action: () => this.emit({ type: 'uninstallCcHooks' }),
       },
+      { item: 'Separator' },
+      {
+        id: 'retry-bongo',
+        text: '重试键盘监听',
+        enabled: true,
+        action: () => this.emit({ type: 'retryBongo' }),
+      },
     ];
 
     const currentPet = this.pets.find((p) => p.id === this.currentPetId);

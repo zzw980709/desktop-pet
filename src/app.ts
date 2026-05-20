@@ -391,6 +391,15 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
           }
         }
         break;
+      case 'retryBongo':
+        {
+          try {
+            await invoke('retry_keyboard_listening');
+          } catch (err) {
+            console.warn('[app] retry bongo failed:', err);
+          }
+        }
+        break;
     }
   }
 
@@ -399,6 +408,7 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
   // Bongo keyboard event listener
   void await listen<{ side: string }>('bongo-tap', (event) => {
     try {
+      console.log('[app] bongo-tap received:', event.payload);
       const bongoState = event.payload.side === 'Left' ? 'bongo-left' : 'bongo-right';
       behavior.handleBongoTap(event.payload.side === 'Left' ? 'left' : 'right');
       animator.play(bongoState);
