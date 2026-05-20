@@ -97,10 +97,12 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
     try {
       const pos = await getCurrentWindow().outerPosition();
       const clamped = await clampToMonitor(pos.x, pos.y, canvas);
+      const currentAiConfig = getConfig();
       await invoke('save_preferences', {
         preferences: {
           activePetId: activePet.id,
           windowPosition: { x: clamped.x, y: clamped.y },
+          aiConfig: currentAiConfig ?? undefined,
         },
       });
     } catch (err) {
