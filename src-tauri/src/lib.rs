@@ -5,6 +5,7 @@ use tauri_plugin_dialog::DialogExt;
 use tracing::{error, info, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use tracing_appender::rolling::RollingFileAppender;
+use std::collections::HashMap;
 
 mod pets;
 mod cc_hooks;
@@ -712,6 +713,98 @@ fn uninstall_cc_hooks() -> CcHookResult {
     }
 }
 
+#[tauri::command]
+async fn get_ai_config(app_handle: tauri::AppHandle) -> Option<AiConfig> {
+    let Ok(app_data) = app_handle.path().app_data_dir() else { return None };
+    let prefs_path = preferences_path(&app_data);
+    let content = fs::read_to_string(&prefs_path).ok()?;
+    let prefs = serde_json::from_str::<Preferences>(&content).ok()?;
+    prefs.ai_config
+}
+
+#[tauri::command]
+async fn set_ai_config(app_handle: tauri::AppHandle, config: AiConfig) -> Result<(), String> {
+    let app_data = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let prefs_path = preferences_path(&app_data);
+    let mut prefs: Preferences = if prefs_path.exists() {
+        fs::read_to_string(&prefs_path)
+            .ok()
+            .and_then(|c| serde_json::from_str(&c).ok())
+            .unwrap_or(Preferences {
+                active_pet_id: "cat".into(),
+                window_position: None,
+                ai_config: None,
+            })
+    } else {
+        Preferences { active_pet_id: "cat".into(), window_position: None, ai_config: None }
+    };
+    prefs.ai_config = Some(config);
+    let content = serde_json::to_string_pretty(&prefs).map_err(|e| e.to_string())?;
+    fs::write(&prefs_path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn chat_with_pet(
+    app_handle: tauri::AppHandle,
+    messages: Vec<ChatMessage>,
+) -> Result<String, String> {
+    let app_data = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let prefs_path = preferences_path(&app_data);
+    let prefs: Preferences = fs::read_to_string(&prefs_path)
+        .ok()
+        .and_then(|c| serde_json::from_str(&c).ok())
+        .unwrap_or(Preferences { active_pet_id: "cat".into(), window_position: None, ai_config: None });
+    let config = prefs.ai_config.ok_or("AI 未配置，请在 AI 设置中输入 API Key".to_string())?;
+    ai::chat(&config, &messages, 30).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn generate_event_reaction(
+    app_handle: tauri::AppHandle,
+    event: String,
+) -> Result<String, String> {
+    let app_data = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let prefs_path = preferences_path(&app_data);
+    let prefs: Preferences = fs::read_to_string(&prefs_path)
+        .ok()
+        .and_then(|c| serde_json::from_str(&c).ok())
+        .unwrap_or(Preferences { active_pet_id: "cat".into(), window_position: None, ai_config: None });
+    let config = prefs.ai_config.ok_or("no config".to_string())?;
+
+    let desc_map: HashMap<&str, &str> = [
+        ("thinking", "主人正在认真思考"),
+        ("tool-bash", "主人正在运行命令行"),
+        ("tool-edit", "主人正在编辑代码"),
+        ("tool-write", "主人正在写文件"),
+        ("tool-web", "主人正在浏览网页"),
+        ("waiting", "主人在等待授权操作"),
+        ("context-compacted", "对话刚被压缩了"),
+        ("completion", "主人刚完成了任务"),
+    ].into_iter().collect();
+
+    let desc = desc_map.get(event.as_str()).copied().unwrap_or("主人在做点什么");
+    let user_msg = format!("你注意到主人正在：{}，请你随口说一句简短的反应（不超过20字）", desc);
+
+    let system_prompt = config.system_prompt.clone();
+    let messages = vec![
+        ChatMessage { role: "system".into(), content: system_prompt },
+        ChatMessage { role: "user".into(), content: user_msg },
+    ];
+    ai::chat(&config, &messages, 8).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn test_ai_connection(
+    _app_handle: tauri::AppHandle,
+    config: AiConfig,
+) -> Result<String, String> {
+    let messages = vec![
+        ChatMessage { role: "system".into(), content: "你是一个助手".into() },
+        ChatMessage { role: "user".into(), content: "回复'连接成功'".into() },
+    ];
+    ai::chat(&config, &messages, 15).await.map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -726,7 +819,12 @@ pub fn run() {
             add_pet_from_spritesheet,
             remove_pet,
             install_cc_hooks,
-            uninstall_cc_hooks
+            uninstall_cc_hooks,
+            get_ai_config,
+            set_ai_config,
+            chat_with_pet,
+            generate_event_reaction,
+            test_ai_connection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
