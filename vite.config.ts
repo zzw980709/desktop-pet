@@ -16,6 +16,7 @@ export default defineConfig(async () => ({
       input: {
         main: 'index.html',
         'ai-settings': 'ai-settings.html',
+        'pet-import': 'pet-import.html',
       },
     },
   },
