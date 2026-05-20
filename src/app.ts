@@ -23,8 +23,11 @@ function getRenderScale(canvas: HTMLCanvasElement): number {
 }
 
 function getWindowSize(canvas: HTMLCanvasElement) {
-  const s = getRenderScale(canvas);
-  return { w: 64 * s, h: 64 * s };
+  // Canvas fills the window; use CSS pixel dimensions for screen-bounds clamping
+  return {
+    w: canvas.clientWidth || 64,
+    h: canvas.clientHeight || 64,
+  };
 }
 
 async function clampToMonitor(x: number, y: number, canvas: HTMLCanvasElement): Promise<{ x: number; y: number }> {
