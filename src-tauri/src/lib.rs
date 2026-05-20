@@ -874,12 +874,14 @@ fn show_bubble_window(app_handle: tauri::AppHandle, data: BubbleData) {
         return;
     };
 
-    // Position bubble above main window
+    // Position bubble above main window (logical coords to handle Retina)
     if let Ok(pos) = main_win.outer_position() {
         if let Ok(size) = main_win.outer_size() {
-            let bubble_x = pos.x + (size.width as i32 - 350) / 2;
-            let bubble_y = pos.y - 65;
-            let _ = bubble_win.set_position(tauri::PhysicalPosition::new(bubble_x.max(0), bubble_y.max(0)));
+            let scale = main_win.scale_factor().unwrap_or(1.0);
+            let main_w = size.width as f64 / scale;
+            let bubble_x = pos.x as f64 / scale + (main_w - 350.0) / 2.0;
+            let bubble_y = pos.y as f64 / scale - 70.0;
+            let _ = bubble_win.set_position(tauri::LogicalPosition::new(bubble_x.max(0.0), bubble_y.max(0.0)));
         }
     }
 
@@ -899,18 +901,16 @@ fn hide_bubble_window(app_handle: tauri::AppHandle) {
 
 #[tauri::command]
 fn sync_bubble_position(app_handle: tauri::AppHandle) {
-    let Some(bubble_win) = app_handle.get_webview_window("cc-bubble") else {
-        return;
-    };
-    let Some(main_win) = app_handle.get_webview_window("main") else {
-        return;
-    };
+    let Some(bubble_win) = app_handle.get_webview_window("cc-bubble") else { return; };
+    let Some(main_win) = app_handle.get_webview_window("main") else { return; };
     if let Ok(true) = bubble_win.is_visible() {
         if let Ok(pos) = main_win.outer_position() {
             if let Ok(size) = main_win.outer_size() {
-                let bubble_x = pos.x + (size.width as i32 - 350) / 2;
-                let bubble_y = pos.y - 65;
-                let _ = bubble_win.set_position(tauri::PhysicalPosition::new(bubble_x.max(0), bubble_y.max(0)));
+                let scale = main_win.scale_factor().unwrap_or(1.0);
+                let main_w = size.width as f64 / scale;
+                let bubble_x = pos.x as f64 / scale + (main_w - 350.0) / 2.0;
+                let bubble_y = pos.y as f64 / scale - 70.0;
+                let _ = bubble_win.set_position(tauri::LogicalPosition::new(bubble_x.max(0.0), bubble_y.max(0.0)));
             }
         }
     }

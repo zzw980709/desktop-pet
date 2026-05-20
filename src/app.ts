@@ -310,12 +310,11 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
         borderColor: config.borderColor,
       },
     });
-    if (!config.persistent) {
-      bubbleHideTimer = setTimeout(() => {
-        void invoke('hide_bubble_window');
-        bubbleActive = false;
-      }, BUBBLE_TRANSIENT_VISIBLE_MS);
-    }
+    const timeout = config.persistent ? 8000 : BUBBLE_TRANSIENT_VISIBLE_MS;
+    bubbleHideTimer = setTimeout(() => {
+      void invoke('hide_bubble_window');
+      bubbleActive = false;
+    }, timeout);
   }
 
   async function handleCcEvent(eventName: string): Promise<void> {
