@@ -4,7 +4,7 @@ export type State = PetState;
 
 type StateChangeHandler = (newState: State, oldState: State) => void;
 
-const RESET_TO_IDLE_ON_END: State[] = ['waving', 'jumping', 'failed', 'bongo-left', 'bongo-right'];
+const RESET_TO_IDLE_ON_END: State[] = ['waving', 'jumping', 'failed'];
 const RANDOM_IDLE_TRANSITIONS: State[] = ['running-right', 'running-left', 'jumping', 'running', 'waiting', 'review'];
 const DRAG_SETTLE_MS = 180;
 const DIRECTIONAL_DRAG_STATES: State[] = ['running-right', 'running-left'];
@@ -36,6 +36,7 @@ export class BehaviorEngine {
   private stateElapsed = 0;
   private dragging = false;
   private dragSettleTimer = 0;
+  private _ccForced = false;
   private rng: () => number;
   private roaming: RoamingState = {
     active: false,
@@ -152,6 +153,7 @@ export class BehaviorEngine {
     this.stateElapsed = 0;
     if (newState === 'idle') {
       this.dragging = false;
+      this._ccForced = false;
       this.resetIdleTimer();
     }
     for (const fn of this.listeners) {
@@ -178,7 +180,7 @@ export class BehaviorEngine {
       if (this._currentState !== 'idle') {
         if (!RESET_TO_IDLE_ON_END.includes(this._currentState)) {
           this.stateElapsed += deltaMs;
-          if (this.stateElapsed >= MAX_RANDOM_ACTION_MS) {
+          if (!this._ccForced && this.stateElapsed >= MAX_RANDOM_ACTION_MS) {
             this.transitionTo('idle');
           }
         }
@@ -252,6 +254,7 @@ export class BehaviorEngine {
   }
 
   forceState(state: State): void {
+    this._ccForced = true;
     this.transitionTo(state);
   }
 
@@ -272,11 +275,6 @@ export class BehaviorEngine {
       return;
     }
     this.transitionTo('idle');
-  }
-
-  handleBongoTap(side: 'left' | 'right'): void {
-    if (this.dragging) return;
-    this.transitionTo(side === 'left' ? 'bongo-left' : 'bongo-right');
   }
 
   handleAnimationEnd(): void {

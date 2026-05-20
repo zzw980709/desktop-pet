@@ -27,10 +27,6 @@ const PET_ANIMATIONS: Record<PetState, AnimationSpec> = {
   running: { row: 7, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [160, 140, 160, 140, 160, 300], loop: true },
   // Thoughtful review: slow look → ponder → slow look away
   review: { row: 8, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [400, 280, 450, 280, 220, 400], loop: true },
-  // Bongo paw taps (non-looping, triggered by keyboard)
-  // Uses 4-frame waving-based animation, mirrored for right side
-  'bongo-left': { row: 9, usedColumns: [0, 1, 2, 3], durationsMs: [100, 80, 120, 140], loop: false },
-  'bongo-right': { row: 10, usedColumns: [0, 1, 2, 3], durationsMs: [100, 80, 120, 140], loop: false },
 };
 
 type TransitionState = {
@@ -68,10 +64,8 @@ export class Animator {
   }
 
   play(state: PetState): void {
-    // Restart bongo states to allow rapid same-side taps
-    const isBongo = state === 'bongo-left' || state === 'bongo-right';
-    if (state === this.currentState && !isBongo) return;
-    const transition = isBongo ? { frameIndex: 0, elapsed: 0 } : this.computeTransition(state);
+    if (state === this.currentState) return;
+    const transition = this.computeTransition(state);
     this.currentState = state;
     this.currentAnimation = state;
     this.currentFrameIndex = transition.frameIndex;

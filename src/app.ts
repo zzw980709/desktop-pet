@@ -16,6 +16,12 @@ import type { PetCatalogEntry, PetState, Preferences } from './types';
 const DRAG_ANIMATED_STATES = new Set(['running-right', 'running-left']);
 const EDGE_DETECT_MARGIN = 40;
 
+function easeOutBack(t: number): number {
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+
 function getRenderScale(canvas: HTMLCanvasElement): number {
   const widthScale = (canvas.clientWidth || 64) / CELL_WIDTH;
   const heightScale = (canvas.clientHeight || 64) / CELL_HEIGHT;
@@ -324,6 +330,111 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
   let heartAlpha = 0;
   const HEART_DURATION = 600;
   let heartTimer = 0;
+
+  interface CcEventConfig {
+    state: PetState;
+    bubbleText: string;
+    emoji: string;
+    bgColor: string;
+    borderColor: string;
+    persistent: boolean;
+  }
+
+  const ccEventConfig: Record<string, CcEventConfig> = {
+    'thinking': {
+      state: 'review',
+      bubbleText: 'Thinking...',
+      emoji: '💭',
+      bgColor: '#e3f2fd',
+      borderColor: '#90caf9',
+      persistent: true,
+    },
+    'tool-bash': {
+      state: 'running',
+      bubbleText: 'Running command...',
+      emoji: '⚡',
+      bgColor: '#e1f5fe',
+      borderColor: '#4fc3f7',
+      persistent: true,
+    },
+    'tool-edit': {
+      state: 'review',
+      bubbleText: 'Editing code...',
+      emoji: '✏️',
+      bgColor: '#e8f5e9',
+      borderColor: '#81c784',
+      persistent: true,
+    },
+    'tool-write': {
+      state: 'running',
+      bubbleText: 'Writing file...',
+      emoji: '💾',
+      bgColor: '#e8f5e9',
+      borderColor: '#66bb6a',
+      persistent: true,
+    },
+    'tool-web': {
+      state: 'review',
+      bubbleText: 'Browsing...',
+      emoji: '🌐',
+      bgColor: '#f3e5f5',
+      borderColor: '#ce93d8',
+      persistent: true,
+    },
+    'tool-calling': {
+      state: 'running',
+      bubbleText: 'Using tools...',
+      emoji: '🔧',
+      bgColor: '#f5f5f5',
+      borderColor: '#bdbdbd',
+      persistent: true,
+    },
+    'waiting': {
+      state: 'waiting',
+      bubbleText: 'Waiting...',
+      emoji: '⏳',
+      bgColor: '#fff3e0',
+      borderColor: '#ffb74d',
+      persistent: true,
+    },
+    'context-compacted': {
+      state: 'failed',
+      bubbleText: 'Compacted',
+      emoji: '📦',
+      bgColor: '#fce4ec',
+      borderColor: '#e57373',
+      persistent: false,
+    },
+    'completion': {
+      state: 'waving',
+      bubbleText: 'Done!',
+      emoji: '✅',
+      bgColor: '#e8f5e9',
+      borderColor: '#66bb6a',
+      persistent: false,
+    },
+  };
+
+  let bubble: { config: CcEventConfig; phase: 'entering' | 'visible' | 'exiting'; timer: number } | null = null;
+  const BUBBLE_ENTER_MS = 300;
+  const BUBBLE_EXIT_MS = 400;
+  const BUBBLE_TRANSIENT_VISIBLE_MS = 2500;
+
+  function applyCcEvent(eventName: string): void {
+    const config = ccEventConfig[eventName];
+    if (!config) return;
+
+    behavior.forceState(config.state);
+    animator.play(config.state);
+
+    // If switching from a persistent bubble, hard-cut (no exit animation)
+    if (bubble && bubble.config.persistent && config.persistent) {
+      bubble = { config, phase: 'visible', timer: 0 };
+      return;
+    }
+
+    bubble = { config, phase: 'entering', timer: BUBBLE_ENTER_MS };
+  }
   let edgeRedirectCooldown = 0;
 
   behavior.on((nextState) => {
@@ -391,47 +502,15 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
           }
         }
         break;
-      case 'retryBongo':
-        {
-          try {
-            await invoke('retry_keyboard_listening');
-          } catch (err) {
-            console.warn('[app] retry bongo failed:', err);
-          }
-        }
-        break;
     }
   }
 
   nativeMenu.on(handleMenuAction);
 
-  // Bongo keyboard event listener
-  void await listen<{ side: string }>('bongo-tap', (event) => {
-    try {
-      console.log('[app] bongo-tap received:', event.payload);
-      const bongoState = event.payload.side === 'Left' ? 'bongo-left' : 'bongo-right';
-      behavior.handleBongoTap(event.payload.side === 'Left' ? 'left' : 'right');
-      animator.play(bongoState);
-    } catch (err) {
-      console.error('[app] bongo tap error:', err);
-    }
-  });
-
   // CC Hook event listener
   void listen<string>('cc-event', (event) => {
     try {
-      const stateMap: Record<string, PetState> = {
-        'thinking': 'review',
-        'tool-calling': 'running',
-        'waiting': 'waiting',
-        'context-compacted': 'failed',
-        'completion': 'waving',
-      };
-      const petState = stateMap[event.payload];
-      if (petState) {
-        behavior.forceState(petState);
-        animator.play(petState);
-      }
+      applyCcEvent(event.payload);
     } catch (err) {
       console.error('[app] cc-event error:', err);
     }
@@ -513,6 +592,75 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
         heartTimer -= deltaMs;
         heartAlpha = Math.max(0, heartTimer / HEART_DURATION);
         renderer.drawHeart(heartAlpha);
+      }
+
+      if (bubble) {
+        bubble.timer -= deltaMs;
+        switch (bubble.phase) {
+          case 'entering': {
+            if (bubble.timer <= 0) {
+              bubble.phase = 'visible';
+              bubble.timer = 0;
+            }
+            const t = 1 - Math.max(0, bubble.timer / BUBBLE_ENTER_MS);
+            const scale = 0.3 + 0.7 * easeOutBack(t);
+            const alpha = t;
+            renderer.drawBubble({
+              text: bubble.config.bubbleText,
+              emoji: bubble.config.emoji,
+              bgColor: bubble.config.bgColor,
+              borderColor: bubble.config.borderColor,
+              scale,
+              alpha,
+            });
+            break;
+          }
+          case 'visible': {
+            if (bubble.config.persistent) {
+              renderer.drawBubble({
+                text: bubble.config.bubbleText,
+                emoji: bubble.config.emoji,
+                bgColor: bubble.config.bgColor,
+                borderColor: bubble.config.borderColor,
+                scale: 1,
+                alpha: 1,
+              });
+            } else {
+              if (bubble.timer <= -BUBBLE_TRANSIENT_VISIBLE_MS) {
+                bubble.phase = 'exiting';
+                bubble.timer = BUBBLE_EXIT_MS;
+              }
+              renderer.drawBubble({
+                text: bubble.config.bubbleText,
+                emoji: bubble.config.emoji,
+                bgColor: bubble.config.bgColor,
+                borderColor: bubble.config.borderColor,
+                scale: 1,
+                alpha: 1,
+              });
+            }
+            break;
+          }
+          case 'exiting': {
+            if (bubble.timer <= 0) {
+              bubble = null;
+              behavior.forceState('idle');
+              animator.play('idle');
+            } else {
+              const alpha = Math.max(0, bubble.timer / BUBBLE_EXIT_MS);
+              const scale = 1 - 0.1 * (1 - alpha);
+              renderer.drawBubble({
+                text: bubble.config.bubbleText,
+                emoji: bubble.config.emoji,
+                bgColor: bubble.config.bgColor,
+                borderColor: bubble.config.borderColor,
+                scale,
+                alpha,
+              });
+            }
+            break;
+          }
+        }
       }
     } catch (err) {
       // Rate-limit loop errors to 1 per 2 seconds

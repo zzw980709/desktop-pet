@@ -65,6 +65,102 @@ export class Renderer {
     [3, 5],
   ];
 
+  drawBubble(options: {
+    text: string;
+    emoji: string;
+    bgColor: string;
+    borderColor: string;
+    scale: number;
+    alpha: number;
+  }): void {
+    const { text, emoji, bgColor, borderColor, scale, alpha } = options;
+    if (alpha <= 0 || !text) return;
+    const s = Math.max(1, this.scale);
+    const ctx = this.ctx;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    const fontSize = Math.round(10 * s);
+    ctx.font = `bold ${fontSize}px monospace`;
+    const fullText = `${emoji} ${text}`;
+    const textW = ctx.measureText(fullText).width;
+    const padX = 8 * s;
+    const padY = 5 * s;
+    const bubbleW = textW + padX * 2;
+    const bubbleH = fontSize + padY * 2;
+    const tailH = 5 * s;
+    // origin for scale transform: tail point (bottom-center of bubble)
+    const originX = this.canvas.width / 2;
+    const originY = 2 * s + bubbleH + tailH;
+
+    // Scale transform from tail point
+    if (scale !== 1) {
+      ctx.translate(originX, originY);
+      ctx.scale(scale, scale);
+      ctx.translate(-originX, -originY);
+    }
+
+    const bubbleX = (this.canvas.width - bubbleW) / 2;
+    const bubbleY = 2 * s;
+    const radius = 4 * s;
+
+    // Shadow
+    ctx.shadowColor = 'rgba(0,0,0,0.15)';
+    ctx.shadowBlur = 3 * s;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 1 * s;
+
+    // Background
+    ctx.fillStyle = bgColor;
+    ctx.beginPath();
+    ctx.moveTo(bubbleX + radius, bubbleY);
+    ctx.lineTo(bubbleX + bubbleW - radius, bubbleY);
+    ctx.quadraticCurveTo(bubbleX + bubbleW, bubbleY, bubbleX + bubbleW, bubbleY + radius);
+    ctx.lineTo(bubbleX + bubbleW, bubbleY + bubbleH - radius);
+    ctx.quadraticCurveTo(bubbleX + bubbleW, bubbleY + bubbleH, bubbleX + bubbleW - radius, bubbleY + bubbleH);
+    ctx.lineTo(bubbleX + radius, bubbleY + bubbleH);
+    ctx.quadraticCurveTo(bubbleX, bubbleY + bubbleH, bubbleX, bubbleY + bubbleH - radius);
+    ctx.lineTo(bubbleX, bubbleY + radius);
+    ctx.quadraticCurveTo(bubbleX, bubbleY, bubbleX + radius, bubbleY);
+    ctx.closePath();
+    ctx.fill();
+
+    // Border
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = Math.max(1, 1.5 * s);
+    ctx.stroke();
+
+    // Tail
+    ctx.fillStyle = bgColor;
+    ctx.beginPath();
+    const tailX = bubbleX + bubbleW / 2;
+    const tailY = bubbleY + bubbleH;
+    ctx.moveTo(tailX - 4 * s, tailY);
+    ctx.lineTo(tailX, tailY + tailH);
+    ctx.lineTo(tailX + 4 * s, tailY);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = borderColor;
+    ctx.stroke();
+
+    // Hide border where tail meets bubble
+    ctx.strokeStyle = bgColor;
+    ctx.beginPath();
+    ctx.moveTo(tailX - 4 * s + 1, tailY);
+    ctx.lineTo(tailX + 4 * s - 1, tailY);
+    ctx.stroke();
+
+    // Text
+    ctx.fillStyle = '#333333';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(fullText, bubbleX + bubbleW / 2, bubbleY + bubbleH / 2);
+
+    ctx.restore();
+  }
+
   drawHeart(alpha: number): void {
     if (alpha <= 0) return;
     const s = this.scale;

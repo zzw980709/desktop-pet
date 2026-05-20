@@ -5,61 +5,59 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run tauri dev    # Dev mode with hot-reload (frontend + Rust backend)
-npm run tauri build  # Production build, outputs DMG to src-tauri/target/release/bundle/dmg/
-npm test             # Run vitest tests (jsdom environment)
-npm run build        # TypeScript check + Vite frontend bundle only
+npm run tauri dev       # Full app with hot-reload (Vite + Tauri window)
+npm run tauri build     # Production build (DMG on macOS)
+npm test                # vitest frontend tests
+npm run tsc --noEmit    # TypeScript type check
+cd src-tauri && cargo check            # Rust compile check
+cd src-tauri && cargo test             # All Rust tests (12)
 ```
+
+`npm run dev` only starts the Vite dev server — it does NOT launch the desktop pet window.
 
 ## Architecture
 
-This is a **Tauri v2** desktop pet app for macOS. A transparent, always-on-top, undecorated window renders a pixel art cat that animates through a fixed spritesheet atlas, responds to drag/click interactions, and taps along with keyboard input (bongocat).
+Tauri v2 app: Rust backend (commands, CC hook HTTP server) + TypeScript/Vite frontend (canvas sprite renderer, behavior state machine).
 
-**Three-layer architecture:**
+### Rust side (`src-tauri/src/`)
 
-| Layer | Technology | Location |
-|-------|-----------|----------|
-| Frontend render loop | TypeScript + Canvas 2D | `src/` |
-| Tauri command bridge | Rust (`tauri::command`) | `src-tauri/src/lib.rs` |
-| Bongo keyboard monitor | Raw CGEventTap FFI (3 threads) | `src-tauri/src/bongo/` |
+- **`lib.rs`** — App bootstrap, Tauri commands (`discover_pets`, `load_preferences`, `save_preferences`, `add_pet_from_spritesheet`, `remove_pet`, `install_cc_hooks`, `uninstall_cc_hooks`), `setup_app` starts CC hook server
+- **`pets.rs`** — Pet discovery from `$APPDATA/pets/`, WebP/PNG dimension parsing, spritesheet validation constants (`EXPECTED_SPRITESHEET_W = 1536`, `CELL_H = 208`)
+- **`cc_hooks.rs`** — HTTP server on `127.0.0.1:18920` that receives CC hook POSTs and emits `cc-event` to the frontend
 
-**Frontend engine pipeline (per frame via `requestAnimationFrame`):**
+### Frontend (`src/`)
 
-1. `BehaviorEngine.tick(deltaMs)` — idle timer → random action transitions. Drag/click/bongo events bypass the timer.
-2. `Animator.tick(deltaMs)` — advances current animation's column index based on per-frame durations. Emits event on non-looping animation end → BehaviorEngine returns to idle.
-3. `Renderer.drawFrame(cell)` — copies the spritesheet cell (via getFrameRect) to offscreen canvas at 1:1, then scaled to display canvas with `imageSmoothingEnabled = false` for crisp pixel art.
+- **`app.ts`** — Runtime wiring: init, render loop, menu action dispatch, `cc-event` listener, bubble display, roaming displacement application, preference saving
+- **`engine/animator.ts`** — Per-state frame progression from fixed atlas rows
+- **`engine/behavior.ts`** — Idle timer, random action state machine, click/drag/roaming transitions. `RESET_TO_IDLE_ON_END` states auto-return to idle on animation complete
+- **`engine/renderer.ts`** — Canvas 2D pixel-art rendering
+- **`engine/loader.ts`** — Pet manifest + spritesheet image loading
+- **`pets/contract.ts`** — Atlas geometry constants (8-column grid, 192×208 cells)
+- **`ui/appmenu.ts`** — Native macOS menu bar (also used on other platforms)
+- **`ui/menu-model.ts`** — Menu action type definitions
+- **`interactions.ts`** — Canvas click/drag event handling
 
-**Spritesheet contract** (`src/pets/contract.ts`):
-- Cell size: 192×208 px. 8 columns. Variable rows (currently 11).
-- Row index = animation state (see `Animator.PET_ANIMATIONS`).
-- Bongo rows: 9 = bongo-left, 10 = bongo-right (4 frames each for paw tap).
+### Data flow: CC hooks → pet reaction
 
-**BehaviorEngine state machine:**
-- Idle → random action (3-8s timer) → auto-return to idle (looping actions timeout at 4s; one-shot actions like waving/jumping/bongo return on animation end).
-- Drag: `handleDragStart` → `handleDragMove(deltaX)` sets running-left/right → `handleDragEnd` with 180ms settle timer → idle.
-- `Interactions` class owns mousedown/move/up on the canvas, accumulates horizontal delta with 8px threshold before signaling direction changes.
+```
+Claude Code hook fires → notify.sh → curl POST 127.0.0.1:18920/event
+  → CcHookServer → app_handle.emit("cc-event", pet_event)
+  → frontend maps event name → PetState → behavior.forceState()
+```
 
-**Bongo keyboard monitor (3-thread architecture):**
-1. CGEventTap thread — runs CFRunLoop. C callback `cg_event_callback` does only atomic stores to lock-free `KEY_PENDING`/`KEY_KEYCODE` statics. No allocation, no mutex, no Tauri calls.
-2. Key poller thread — polls atomics every 500µs, classifies keycodes via `classify_keycode()` (QWERTY touch-typing zones → Left/Right), pushes to `mpsc::channel`.
-3. Forwarder thread — consumes channel, calls `app_handle.emit("bongo-tap", ...)` which the frontend listens for.
+## Spritesheet Atlas Contract
 
-Bongo always auto-starts on app launch (permissions permitting). On macOS, it requires Accessibility permissions. CGEventTap startup failure surfaces a user-facing error message in Chinese.
+Fixed 8-column grid, 192×208 px cells. Row-to-state mapping:
 
-**Pet discovery** (`src/pets/catalog.ts` → `discover_pets` Rust command → `src-tauri/src/pets.rs`):
-- Built-in pet `cat` is initialized from embedded resources into `app_data_dir/pets/cat/` on first run.
-- External pets are discovered from `app_data_dir/pets/*/` directories, each containing `pet.json` + `spritesheet.webp`.
-- `pet.json` must have `"spritesheetPath": "spritesheet.webp"`. Spritesheet width must be 1536px, height must be a multiple of 208px and ≥ 1872px.
+| Row | State |
+|-----|-------|
+| 0 | idle |
+| 1 | running-right |
+| 2 | running-left |
+| 3 | waving |
+| 4 | jumping |
+| 5 | failed |
+| 6 | waiting |
+| 7 | running |
+| 8 | review |
 
-**Menus:** Two UIs share `MenuAction` type and `handleMenuAction` in `app.ts`:
-- `ContextMenu` — inline HTML/CSS panel positioned next to the canvas. Builds/rebuilds DOM on pet list changes. Manages window resize (toggles between 64×64 and pet+menu width).
-- `NativeAppMenu` — Tauri native macOS menu bar. Mirrors the same state/pet/management actions.
-
-**Preferences:** Window position and active pet ID persisted to `app_data_dir/preferences.json` via `save_preferences`/`load_preferences` Rust commands.
-
-## Key invariants
-
-- The `Animator.currentFrameIndex` is always clamped to the current animation's `usedColumns` range.
-- `BehaviorEngine.dragging` prevents tick-based transitions during drag; only `handleDragMove` sets state.
-- Bongo states restart on every tap (even same side) to allow rapid retriggering.
-- The `petLoadVersion` integer in `app.ts` prevents stale async `loadPet` completions from overwriting a newer pet switch.

@@ -6,7 +6,6 @@ use tracing::{error, info, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use tracing_appender::rolling::RollingFileAppender;
 
-mod bongo;
 mod pets;
 mod cc_hooks;
 
@@ -102,15 +101,6 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     init_builtin_pet(&app_data);
     init_preferences(&app_data);
-
-    // Start keyboard listening via rdev in background thread
-    // (rdev::listen blocks, so we run it off the main thread)
-    let handle = app.handle().clone();
-    std::thread::spawn(move || {
-        if let Err(e) = bongo::start_keyboard_listening(handle) {
-            warn!("keyboard listening failed: {}", e);
-        }
-    });
 
     // CC hook server for Claude Code integration
     let cc_server = cc_hooks::CcHookServer::start(app.handle().clone());
@@ -474,11 +464,21 @@ curl -s -X POST "http://127.0.0.1:PORT/event" \
   -d "{\"event\":\"$1\"}"
 "#;
 
-const HOOK_EVENTS: &[(&str, &str)] = &[
-    ("PostToolUse", "tool-calling"),
-    ("PermissionRequest", "waiting"),
-    ("PostCompact", "context-compacted"),
-    ("SessionEnd", "completion"),
+struct HookEntry {
+    event: &'static str,
+    matcher: &'static str,
+    pet_event: &'static str,
+}
+
+const HOOK_ENTRIES: &[HookEntry] = &[
+    HookEntry { event: "UserPromptSubmit", matcher: "", pet_event: "thinking" },
+    HookEntry { event: "PermissionRequest", matcher: "", pet_event: "waiting" },
+    HookEntry { event: "PostToolUse", matcher: "Bash", pet_event: "tool-bash" },
+    HookEntry { event: "PostToolUse", matcher: "Edit", pet_event: "tool-edit" },
+    HookEntry { event: "PostToolUse", matcher: "Write", pet_event: "tool-write" },
+    HookEntry { event: "PostToolUse", matcher: "WebFetch", pet_event: "tool-web" },
+    HookEntry { event: "PostCompact", matcher: "", pet_event: "context-compacted" },
+    HookEntry { event: "SessionEnd", matcher: "", pet_event: "completion" },
 ];
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -549,16 +549,26 @@ fn install_cc_hooks() -> CcHookResult {
         };
     };
 
-    for (hook_event, pet_event) in HOOK_EVENTS {
+    for entry in HOOK_ENTRIES {
         let command = format!(
             "{}/notify.sh {}",
             cc_hooks_dir().display(),
-            pet_event
+            entry.pet_event
         );
-        let entry = serde_json::json!([{
-            "command": command,
-        }]);
-        hooks_obj.insert(hook_event.to_string(), entry);
+        let entry_json = serde_json::json!({
+            "matcher": entry.matcher,
+            "hooks": [{
+                "type": "command",
+                "command": command,
+                "async": true,
+            }],
+        });
+        let arr = hooks_obj
+            .entry(entry.event.to_string())
+            .or_insert_with(|| serde_json::json!([]));
+        if let Some(arr) = arr.as_array_mut() {
+            arr.push(entry_json);
+        }
     }
 
     // Write updated settings
@@ -683,14 +693,6 @@ fn uninstall_cc_hooks() -> CcHookResult {
     }
 }
 
-#[tauri::command]
-fn retry_keyboard_listening(app_handle: tauri::AppHandle) -> Result<(), String> {
-    std::thread::spawn(move || {
-        let _ = bongo::start_keyboard_listening(app_handle);
-    });
-    Ok(())
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -705,8 +707,7 @@ pub fn run() {
             add_pet_from_spritesheet,
             remove_pet,
             install_cc_hooks,
-            uninstall_cc_hooks,
-            retry_keyboard_listening
+            uninstall_cc_hooks
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
