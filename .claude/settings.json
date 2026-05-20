@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"${CLAUDE_PROJECT_DIR}\" && if ! git diff --quiet || ! git diff --cached --quiet; then git add -A && git commit -m \"chore: auto-commit after tasklist completion\"; fi",
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}
