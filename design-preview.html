@@ -1,0 +1,1094 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Desktop Pet — 菜单与设置设计预览</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --base: #1e1e2e;
+    --mantle: #181825;
+    --crust: #11111b;
+    --surface0: #313244;
+    --surface1: #45475a;
+    --surface2: #585b70;
+    --overlay0: #6c7086;
+    --overlay1: #7f849c;
+    --overlay2: #9399b2;
+    --subtext0: #a6adc8;
+    --subtext1: #bac2de;
+    --text: #cdd6f4;
+    --lavender: #b4befe;
+    --blue: #89b4fa;
+    --sapphire: #74c7ec;
+    --sky: #89dceb;
+    --teal: #94e2d5;
+    --green: #a6e3a1;
+    --yellow: #f9e2af;
+    --peach: #fab387;
+    --maroon: #eba0ac;
+    --red: #f38ba8;
+    --mauve: #cba6f7;
+    --pink: #f5c2e7;
+    --rosewater: #f5e0dc;
+    --radius-sm: 8px;
+    --radius: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --font-sans: 'Noto Sans SC', -apple-system, sans-serif;
+    --font-mono: 'Space Mono', 'SF Mono', Monaco, monospace;
+    --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--crust);
+    color: var(--text);
+    height: 100vh;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ===== Desktop Background ===== */
+  .desktop-bg {
+    flex: 1;
+    background:
+      radial-gradient(ellipse at 50% 0%, rgba(203,166,247,0.06) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 80%, rgba(137,180,250,0.04) 0%, transparent 50%),
+      var(--crust);
+    display: flex; flex-direction: column;
+    position: relative;
+  }
+  .desktop-bg::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23b4befe' fill-opacity='0.02'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    pointer-events: none;
+  }
+
+  /* ===== Menu Bar ===== */
+  .menubar {
+    height: 28px;
+    background: rgba(24,24,37,0.92);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(69,71,90,0.3);
+    display: flex; align-items: center;
+    padding: 0 8px; z-index: 100; position: relative;
+    font-size: 11.5px; letter-spacing: 0.01em;
+  }
+  .menubar-app {
+    display: flex; align-items: center; gap: 6px;
+    padding: 0 14px 0 10px; height: 100%;
+    font-weight: 700; font-size: 12px;
+    color: var(--text); opacity: 0.9; letter-spacing: -0.01em;
+  }
+  .menubar-app-icon {
+    width: 16px; height: 16px;
+    background: linear-gradient(135deg, var(--peach), var(--pink));
+    border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px;
+  }
+  .menu-item {
+    position: relative;
+    padding: 0 10px; height: 100%;
+    display: flex; align-items: center;
+    cursor: pointer; border-radius: 5px;
+    transition: background var(--transition);
+    color: var(--subtext0); font-weight: 450; white-space: nowrap;
+  }
+  .menu-item:hover, .menu-item.open {
+    background: rgba(203,166,247,0.15); color: var(--text);
+  }
+
+  /* ===== Dropdown ===== */
+  .menu-dropdown {
+    position: absolute; top: 100%; left: 0;
+    min-width: 220px;
+    background: rgba(30,30,46,0.97);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(69,71,90,0.4);
+    border-radius: var(--radius); padding: 6px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.3);
+    opacity: 0; transform: translateY(-4px) scale(0.96);
+    pointer-events: none;
+    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 200;
+  }
+  .menu-item.open .menu-dropdown {
+    opacity: 1; transform: translateY(0) scale(1);
+    pointer-events: auto;
+  }
+  .menu-dropdown-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 10px; border-radius: 6px;
+    font-size: 12px; cursor: pointer;
+    transition: background var(--transition);
+    color: var(--subtext0); white-space: nowrap;
+  }
+  .menu-dropdown-item:hover { background: rgba(203,166,247,0.12); color: var(--text); }
+  .menu-dropdown-item .shortcut {
+    margin-left: auto; font-size: 10px;
+    color: var(--overlay0); font-family: var(--font-mono); opacity: 0.7;
+  }
+  .menu-dropdown-item .icon { width: 16px; text-align: center; font-size: 13px; flex-shrink: 0; }
+  .menu-dropdown-item.disabled { opacity: 0.45; pointer-events: none; }
+  .menu-dropdown-item .check {
+    width: 14px; text-align: center; flex-shrink: 0; color: var(--mauve);
+    visibility: hidden; font-size: 10px;
+  }
+  .menu-dropdown-item.checked .check { visibility: visible; }
+  .menu-divider { height: 1px; background: rgba(69,71,90,0.25); margin: 4px 6px; }
+  .menu-section-label {
+    font-size: 10px; font-weight: 600;
+    color: var(--overlay1); padding: 4px 10px 2px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .pet-preview-row {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  }
+  .pet-preview-avatar {
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    background: linear-gradient(135deg, var(--peach), var(--yellow));
+    display: flex; align-items: center; justify-content: center; font-size: 16px;
+  }
+
+  /* ===== Settings Window ===== */
+  .window-overlay {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 300; pointer-events: none;
+  }
+  .settings-window {
+    width: 540px; max-height: 640px;
+    background: var(--base);
+    border: 1px solid rgba(69,71,90,0.5);
+    border-radius: var(--radius-xl);
+    box-shadow: 0 24px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.2);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    pointer-events: auto;
+    animation: windowIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes windowIn {
+    from { opacity: 0; transform: scale(0.92) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .window-titlebar {
+    height: 40px; display: flex; align-items: center;
+    padding: 0 12px; background: var(--mantle);
+    border-bottom: 1px solid rgba(69,71,90,0.2); flex-shrink: 0;
+  }
+  .window-dots { display: flex; gap: 7px; margin-right: 12px; }
+  .window-dot {
+    width: 11px; height: 11px; border-radius: 50%;
+    cursor: pointer; transition: all var(--transition);
+  }
+  .window-dot.red { background: #ff5f57; }
+  .window-dot.yellow { background: #febc2e; }
+  .window-dot.green { background: #28c840; }
+  .window-dot:hover { filter: brightness(0.8); }
+  .window-title {
+    flex: 1; text-align: center; font-size: 12px;
+    font-weight: 600; color: var(--subtext0); letter-spacing: -0.01em;
+  }
+
+  /* ===== Tabs ===== */
+  .tab-bar {
+    display: flex; gap: 0;
+    border-bottom: 1px solid rgba(69,71,90,0.2);
+    background: var(--mantle); padding: 0 16px; flex-shrink: 0;
+  }
+  .tab {
+    padding: 10px 16px; font-size: 12px; font-weight: 500;
+    cursor: pointer; color: var(--overlay1);
+    border-bottom: 2px solid transparent;
+    transition: all var(--transition); letter-spacing: 0.01em;
+  }
+  .tab:hover { color: var(--subtext1); }
+  .tab.active { color: var(--mauve); border-bottom-color: var(--mauve); font-weight: 600; }
+  .tab .tab-badge {
+    display: inline-block; width: 6px; height: 6px;
+    border-radius: 50%; background: var(--green);
+    margin-left: 4px; vertical-align: middle;
+  }
+
+  /* ===== Content ===== */
+  .tab-content { flex: 1; overflow-y: auto; padding: 20px 24px; }
+  .tab-content::-webkit-scrollbar { width: 4px; }
+  .tab-content::-webkit-scrollbar-thumb { background: var(--surface1); border-radius: 2px; }
+  .tab-panel { display: none; animation: fadeSlideIn 0.25s ease-out; }
+  .tab-panel.active { display: block; }
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block; font-size: 10.5px; font-weight: 600;
+    color: var(--subtext0); margin-bottom: 5px;
+    letter-spacing: 0.03em;
+  }
+  .field input, .field textarea, .field select {
+    width: 100%; padding: 9px 12px;
+    background: var(--surface0);
+    border: 1px solid var(--surface1);
+    border-radius: var(--radius-sm);
+    color: var(--text); font-size: 12.5px;
+    font-family: var(--font-sans); outline: none;
+    transition: border-color var(--transition), box-shadow var(--transition);
+  }
+  .field input:focus, .field textarea:focus, .field select:focus {
+    border-color: var(--mauve);
+    box-shadow: 0 0 0 3px rgba(203,166,247,0.08);
+  }
+  .field textarea {
+    resize: vertical; min-height: 70px;
+    font-family: var(--font-mono); font-size: 11px; line-height: 1.55;
+  }
+  .field select {
+    cursor: pointer; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23a6adc8' fill='none' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center;
+    padding-right: 28px;
+  }
+
+  /* ===== Combo Box ===== */
+  .combo-box {
+    position: relative;
+  }
+  .combo-box input {
+    width: 100%; padding: 9px 28px 9px 12px;
+    background: var(--surface0);
+    border: 1px solid var(--surface1);
+    border-radius: var(--radius-sm);
+    color: var(--text); font-size: 12.5px;
+    font-family: var(--font-sans); outline: none;
+    transition: border-color var(--transition), box-shadow var(--transition);
+    caret-color: var(--mauve);
+  }
+  .combo-box input:focus {
+    border-color: var(--mauve);
+    box-shadow: 0 0 0 3px rgba(203,166,247,0.08);
+  }
+  .combo-box .combo-arrow {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    font-size: 8px; color: var(--overlay0); pointer-events: none;
+    transition: transform var(--transition);
+  }
+  .combo-box.open .combo-arrow { transform: translateY(-50%) rotate(180deg); }
+  .combo-dropdown {
+    position: absolute; top: 100%; left: 0; right: 0;
+    background: var(--surface0);
+    border: 1px solid var(--surface1);
+    border-radius: var(--radius-sm);
+    margin-top: 4px; z-index: 10;
+    display: none; overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .combo-box.open .combo-dropdown { display: block; }
+  .combo-option {
+    padding: 8px 12px; font-size: 12px;
+    cursor: pointer; color: var(--subtext0);
+    transition: background var(--transition);
+  }
+  .combo-option:hover { background: rgba(203,166,247,0.1); color: var(--text); }
+  .combo-option:first-child { border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+  .combo-option:last-child { border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .field-hint { font-size: 10px; color: var(--overlay0); margin-top: 4px; }
+
+  .btn {
+    padding: 9px 18px; border-radius: var(--radius-sm);
+    font-size: 12.5px; font-weight: 600; cursor: pointer;
+    border: none; font-family: var(--font-sans);
+    letter-spacing: 0.01em; transition: all var(--transition);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--mauve), #b392f0);
+    color: var(--crust); box-shadow: 0 2px 8px rgba(203,166,247,0.2);
+  }
+  .btn-primary:hover { box-shadow: 0 4px 16px rgba(203,166,247,0.35); transform: translateY(-1px); }
+  .btn-secondary {
+    background: var(--surface0); border: 1px solid var(--surface1); color: var(--text);
+  }
+  .btn-secondary:hover { background: var(--surface1); }
+  .btn-danger {
+    background: transparent; border: 1px solid rgba(243,139,168,0.3); color: var(--red);
+  }
+  .btn-danger:hover { background: rgba(243,139,168,0.08); }
+  .btn-sm { padding: 5px 12px; font-size: 11px; border-radius: 6px; }
+  .btn-xs { padding: 4px 8px; font-size: 10px; border-radius: 5px; }
+  .btn-row { display: flex; gap: 8px; margin-top: 20px; }
+  .btn-row-end { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+
+  /* ===== Toggle ===== */
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 0;
+  }
+  .toggle-row .info { font-size: 12px; }
+  .toggle-row .info sub { display: block; font-size: 10px; color: var(--overlay1); margin-top: 1px; }
+  .toggle {
+    width: 42px; height: 24px; border-radius: 12px;
+    background: var(--surface2); cursor: pointer;
+    position: relative; transition: background var(--transition); flex-shrink: 0;
+  }
+  .toggle.on { background: var(--green); }
+  .toggle::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    transition: transform var(--transition);
+  }
+  .toggle.on::after { transform: translateX(18px); }
+
+  /* ===== Status ===== */
+  .status-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; border-radius: var(--radius-sm);
+    background: var(--surface0); margin-bottom: 12px; font-size: 12px;
+  }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--surface2); flex-shrink: 0;
+    transition: background var(--transition);
+  }
+  .status-dot.on { background: var(--green); box-shadow: 0 0 8px rgba(166,227,161,0.3); }
+  .status-dot.off { background: var(--overlay1); }
+
+  /* ===== API Key Cards ===== */
+  .key-card {
+    background: var(--surface0);
+    border: 1px solid var(--surface1);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    transition: all var(--transition);
+    position: relative;
+  }
+  .key-card.default {
+    border-color: rgba(203,166,247,0.3);
+    background: rgba(203,166,247,0.04);
+  }
+  .key-card-header {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  }
+  .key-provider-icon {
+    width: 24px; height: 24px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; flex-shrink: 0;
+  }
+  .key-provider-icon.deepseek { background: rgba(137,180,250,0.15); }
+  .key-provider-icon.openai { background: rgba(166,227,161,0.15); }
+  .key-provider-icon.claude { background: rgba(250,179,135,0.15); }
+  .key-card-header .provider-name { font-weight: 600; font-size: 12.5px; }
+  .key-card-header .default-badge {
+    font-size: 9px; font-weight: 600;
+    color: var(--mauve); background: rgba(203,166,247,0.12);
+    padding: 2px 8px; border-radius: 10px;
+  }
+  .key-card-actions { margin-left: auto; display: flex; gap: 4px; }
+  .key-card-body { display: flex; flex-direction: column; gap: 8px; }
+  .key-card-body .field { margin-bottom: 0; }
+  .key-card-body .field label { font-size: 9.5px; margin-bottom: 3px; }
+
+  .add-key-btn {
+    width: 100%; padding: 10px;
+    background: transparent; border: 1.5px dashed rgba(203,166,247,0.25);
+    border-radius: var(--radius); color: var(--mauve);
+    font-size: 12px; cursor: pointer; font-family: var(--font-sans);
+    font-weight: 500; transition: all var(--transition);
+    margin-bottom: 10px;
+  }
+  .add-key-btn:hover { background: rgba(203,166,247,0.06); border-color: var(--mauve); }
+
+  /* ===== Import Tabs ===== */
+  .import-tabs {
+    display: flex; gap: 0;
+    background: var(--surface0); border-radius: var(--radius-sm);
+    padding: 3px; margin-bottom: 16px;
+  }
+  .import-tab {
+    flex: 1; padding: 8px; text-align: center;
+    font-size: 12px; cursor: pointer; border-radius: 6px;
+    color: var(--overlay1); font-weight: 500;
+    transition: all var(--transition);
+  }
+  .import-tab.active { background: var(--mauve); color: var(--crust); font-weight: 600; }
+
+  /* ===== Pet Select ===== */
+  .pet-select-list { display: flex; flex-direction: column; gap: 6px; max-height: 120px; overflow-y: auto; }
+  .pet-select-card {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 14px; border-radius: var(--radius-sm);
+    background: var(--surface0); cursor: pointer;
+    border: 1.5px solid transparent;
+    transition: all var(--transition);
+  }
+  .pet-select-card:hover { background: var(--surface1); }
+  .pet-select-card.selected {
+    border-color: var(--mauve);
+    background: rgba(203,166,247,0.06);
+  }
+  .pet-select-card .pet-emoji { font-size: 20px; }
+  .pet-select-card .pet-name { font-size: 13px; font-weight: 600; }
+  .pet-select-card .pet-id { font-size: 10px; color: var(--overlay1); margin-left: auto; }
+  .pet-select-card .check-circle {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid var(--surface2); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; transition: all var(--transition);
+  }
+  .pet-select-card.selected .check-circle {
+    border-color: var(--mauve); background: var(--mauve); color: var(--crust);
+  }
+
+  /* ===== Toast ===== */
+  .toast {
+    position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
+    padding: 10px 24px; border-radius: 20px;
+    font-size: 12px; font-weight: 500;
+    background: var(--surface0); color: var(--text);
+    border: 1px solid var(--surface1);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+    z-index: 999; pointer-events: none;
+    animation: toastIn 0.3s ease-out;
+  }
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+  }
+  .hidden { display: none !important; }
+
+  /* ===== Divider ===== */
+  .section-divider {
+    height: 1px; background: rgba(69,71,90,0.2);
+    margin: 16px 0;
+  }
+  .section-label {
+    font-size: 11px; font-weight: 600; color: var(--overlay1);
+    margin-bottom: 12px; letter-spacing: 0.03em;
+  }
+</style>
+</head>
+<body>
+
+<div class="desktop-bg">
+  <!-- ===== MENU BAR ===== -->
+  <div class="menubar" id="menubar">
+    <div class="menubar-app">
+      <div class="menubar-app-icon">🐱</div>
+      Desktop Pet
+    </div>
+
+    <!-- 桌面宠物 -->
+    <div class="menu-item" data-menu="pet-menu">
+      桌面宠物
+      <div class="menu-dropdown" id="pet-menu">
+        <div class="pet-preview-row">
+          <div class="pet-preview-avatar">🐱</div>
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text)">小橘</div>
+            <div style="font-size:10px;color:var(--overlay1)">cat</div>
+          </div>
+        </div>
+        <div class="menu-divider"></div>
+        <div class="menu-section-label">状态动作</div>
+        <div class="menu-dropdown-item" data-action="waving"><span class="check">●</span> 挥手 👋</div>
+        <div class="menu-dropdown-item" data-action="review"><span class="check"></span> 思考 💭</div>
+        <div class="menu-dropdown-item" data-action="running"><span class="check"></span> 工作 ⚡</div>
+        <div class="menu-dropdown-item" data-action="waiting"><span class="check"></span> 等待 ⏳</div>
+        <div class="menu-dropdown-item" data-action="jumping"><span class="check"></span> 跳跃 🦘</div>
+        <div class="menu-dropdown-item" data-action="running-right"><span class="check"></span> 向右移动 ➡️</div>
+        <div class="menu-dropdown-item" data-action="running-left"><span class="check"></span> 向左移动 ⬅️</div>
+        <div class="menu-dropdown-item" data-action="idle"><span class="check"></span> 重置 🔄</div>
+        <div class="menu-divider"></div>
+        <div class="menu-section-label">切换宠物</div>
+        <div class="menu-dropdown-item checked" data-pet="cat"><span class="check">●</span><span class="icon">🐱</span> 小橘</div>
+        <div class="menu-dropdown-item" data-pet="boba"><span class="check"></span><span class="icon">🐶</span> Boba</div>
+        <div class="menu-dropdown-item" data-pet="pixel-frog"><span class="check"></span><span class="icon">🐸</span> Pixel Frog</div>
+      </div>
+    </div>
+
+    <!-- 编辑 -->
+    <div class="menu-item" data-menu="edit-menu">
+      编辑
+      <div class="menu-dropdown" id="edit-menu">
+        <div class="menu-dropdown-item"><span class="icon"></span> 撤销 <span class="shortcut">⌘Z</span></div>
+        <div class="menu-dropdown-item"><span class="icon"></span> 重做 <span class="shortcut">⌘⇧Z</span></div>
+        <div class="menu-divider"></div>
+        <div class="menu-dropdown-item"><span class="icon"></span> 剪切 <span class="shortcut">⌘X</span></div>
+        <div class="menu-dropdown-item"><span class="icon"></span> 复制 <span class="shortcut">⌘C</span></div>
+        <div class="menu-dropdown-item"><span class="icon"></span> 粘贴 <span class="shortcut">⌘V</span></div>
+        <div class="menu-dropdown-item"><span class="icon"></span> 全选 <span class="shortcut">⌘A</span></div>
+      </div>
+    </div>
+
+    <!-- 设置 -->
+    <div class="menu-item" data-menu="settings-menu">
+      设置
+      <div class="menu-dropdown" id="settings-menu">
+        <div class="menu-dropdown-item" data-open-tab="ai">
+          <span class="icon">🤖</span> AI 设置 <span class="shortcut">⌘,</span>
+        </div>
+        <div class="menu-dropdown-item" data-open-tab="persona">
+          <span class="icon">✨</span> 宠物人设
+        </div>
+        <div class="menu-divider"></div>
+        <div class="menu-dropdown-item" data-open-tab="import">
+          <span class="icon">➕</span> 添加宠物
+        </div>
+        <div class="menu-divider"></div>
+        <div class="menu-dropdown-item" data-open-tab="hooks">
+          <span class="icon">🪝</span> CC Hooks
+          <span class="shortcut" style="color:var(--green);font-size:8px;">●</span>
+        </div>
+        <div class="menu-divider"></div>
+        <div class="menu-dropdown-item" data-pet="remove" style="color:var(--red);">
+          <span class="icon">🗑️</span> 移除 "小橘"
+        </div>
+      </div>
+    </div>
+
+    <!-- Right status -->
+    <div style="margin-left:auto;display:flex;align-items:center;gap:8px;padding-right:8px;">
+      <span style="font-size:10px;color:var(--overlay1);">CC Hooks</span>
+      <span class="status-dot on" style="width:7px;height:7px;"></span>
+    </div>
+  </div>
+
+  <!-- ===== DESKTOP WITH PET ===== -->
+  <div style="flex:1;display:flex;align-items:center;justify-content:center;position:relative;">
+    <div style="text-align:center;position:relative;z-index:1;">
+      <div style="font-size:80px;filter:drop-shadow(0 8px 24px rgba(203,166,247,0.2));margin-bottom:12px;">🐱</div>
+      <div style="font-size:14px;font-weight:600;color:var(--text);">小橘</div>
+      <div style="font-size:11px;color:var(--overlay1);margin-top:2px;">点击菜单栏探索设置 · 点击宠物打开设置窗口</div>
+      <button class="btn btn-primary" style="margin-top:16px;" id="open-settings-btn">打开设置 ⌘,</button>
+    </div>
+  </div>
+
+  <!-- ===== SETTINGS WINDOW ===== -->
+  <div class="window-overlay" id="settings-overlay">
+    <div class="settings-window" id="settings-window">
+      <div class="window-titlebar">
+        <div class="window-dots">
+          <div class="window-dot red" id="close-window"></div>
+          <div class="window-dot yellow"></div>
+          <div class="window-dot green"></div>
+        </div>
+        <div class="window-title">设置</div>
+        <div style="width:45px;"></div>
+      </div>
+
+      <!-- Tab Bar -->
+      <div class="tab-bar" id="tab-bar">
+        <div class="tab active" data-tab="ai">🤖 AI 设置</div>
+        <div class="tab" data-tab="persona">✨ 宠物人设</div>
+        <div class="tab" data-tab="import">➕ 添加宠物</div>
+        <div class="tab" data-tab="hooks">🪝 CC Hooks<span class="tab-badge"></span></div>
+      </div>
+
+      <div class="tab-content">
+        <!-- ===== AI 设置 Panel ===== -->
+        <div class="tab-panel active" id="panel-ai">
+          <div class="section-label">API Keys</div>
+
+          <!-- Key Card 1: DeepSeek (default) -->
+          <div class="key-card default" data-key="deepseek">
+            <div class="key-card-header">
+              <div class="key-provider-icon deepseek">🔵</div>
+              <span class="provider-name">DeepSeek</span>
+              <span class="default-badge">默认</span>
+              <div class="key-card-actions">
+                <button class="btn btn-secondary btn-xs set-default" data-key="deepseek" disabled style="opacity:0.4;">★ 默认</button>
+                <button class="btn btn-danger btn-xs delete-key" data-key="deepseek" style="display:none;">✕</button>
+              </div>
+            </div>
+            <div class="key-card-body">
+              <div class="field-row">
+                <div class="field">
+                  <label>API Key</label>
+                  <div style="display:flex;gap:6px;">
+                    <input type="password" value="sk-********************************" style="flex:1;" />
+                    <button class="btn btn-secondary btn-sm show-key" style="flex-shrink:0;">👁</button>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>Base URL</label>
+                  <input value="https://api.deepseek.com" />
+                </div>
+              </div>
+              <div class="field">
+                <label>默认模型</label>
+                <div class="combo-box" data-combo="deepseek-model">
+                  <input value="DeepSeek-V3" placeholder="选择或输入模型名..." />
+                  <span class="combo-arrow">▼</span>
+                  <div class="combo-dropdown">
+                    <div class="combo-option">DeepSeek-V3</div>
+                    <div class="combo-option">DeepSeek-R1</div>
+                    <div class="combo-option">deepseek-chat</div>
+                    <div class="combo-option">deepseek-reasoner</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Key Card 2: OpenAI -->
+          <div class="key-card" data-key="openai">
+            <div class="key-card-header">
+              <div class="key-provider-icon openai">🟢</div>
+              <span class="provider-name">OpenAI</span>
+              <span class="default-badge" style="visibility:hidden;">默认</span>
+              <div class="key-card-actions">
+                <button class="btn btn-secondary btn-xs set-default" data-key="openai">★ 设默认</button>
+                <button class="btn btn-danger btn-xs delete-key" data-key="openai">✕</button>
+              </div>
+            </div>
+            <div class="key-card-body">
+              <div class="field-row">
+                <div class="field">
+                  <label>API Key</label>
+                  <div style="display:flex;gap:6px;">
+                    <input type="password" value="sk-proj-********************************" style="flex:1;" />
+                    <button class="btn btn-secondary btn-sm show-key" style="flex-shrink:0;">👁</button>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>Base URL</label>
+                  <input value="https://api.openai.com/v1" />
+                </div>
+              </div>
+              <div class="field">
+                <label>默认模型</label>
+                <div class="combo-box" data-combo="openai-model">
+                  <input value="gpt-4o" placeholder="选择或输入模型名..." />
+                  <span class="combo-arrow">▼</span>
+                  <div class="combo-dropdown">
+                    <div class="combo-option">gpt-4o</div>
+                    <div class="combo-option">gpt-4o-mini</div>
+                    <div class="combo-option">gpt-4-turbo</div>
+                    <div class="combo-option">o1</div>
+                    <div class="combo-option">o3-mini</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Key Card 3: Claude -->
+          <div class="key-card" data-key="claude">
+            <div class="key-card-header">
+              <div class="key-provider-icon claude">🟠</div>
+              <span class="provider-name">Anthropic</span>
+              <span class="default-badge" style="visibility:hidden;">默认</span>
+              <div class="key-card-actions">
+                <button class="btn btn-secondary btn-xs set-default" data-key="claude">★ 设默认</button>
+                <button class="btn btn-danger btn-xs delete-key" data-key="claude">✕</button>
+              </div>
+            </div>
+            <div class="key-card-body">
+              <div class="field-row">
+                <div class="field">
+                  <label>API Key</label>
+                  <div style="display:flex;gap:6px;">
+                    <input type="password" value="sk-ant-********************************" style="flex:1;" />
+                    <button class="btn btn-secondary btn-sm show-key" style="flex-shrink:0;">👁</button>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>Base URL</label>
+                  <input value="https://api.anthropic.com/v1" />
+                </div>
+              </div>
+              <div class="field">
+                <label>默认模型</label>
+                <div class="combo-box" data-combo="claude-model">
+                  <input value="claude-opus-4-7" placeholder="选择或输入模型名..." />
+                  <span class="combo-arrow">▼</span>
+                  <div class="combo-dropdown">
+                    <div class="combo-option">claude-opus-4-7</div>
+                    <div class="combo-option">claude-sonnet-4-6</div>
+                    <div class="combo-option">claude-haiku-4-5</div>
+                    <div class="combo-option">claude-opus-4-5</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button class="add-key-btn" id="add-key-btn">+ 添加 API Key</button>
+
+          <div class="section-divider"></div>
+
+          <!-- Idle Chat Settings -->
+          <div class="toggle-row">
+            <div class="info">空闲时主动说话<sub>发呆久了偶尔冒一句话</sub></div>
+            <div class="toggle on" id="idle-toggle"></div>
+          </div>
+          <div class="field">
+            <label>说话间隔</label>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input type="number" value="300" style="width:80px;text-align:center;" />
+              <span style="font-size:12px;color:var(--overlay1);">秒</span>
+            </div>
+          </div>
+
+          <div class="btn-row-end">
+            <button class="btn btn-secondary" id="test-all-btn">测试全部连接</button>
+            <button class="btn btn-primary">保存设置</button>
+          </div>
+        </div>
+
+        <!-- ===== 宠物人设 Panel ===== -->
+        <div class="tab-panel" id="panel-persona">
+          <div class="field">
+            <label>选择宠物</label>
+            <div class="pet-select-list">
+              <div class="pet-select-card selected" data-persona-pet="cat">
+                <span class="pet-emoji">🐱</span>
+                <span class="pet-name">小橘</span>
+                <span class="pet-id">cat · DeepSeek</span>
+                <div class="check-circle">✓</div>
+              </div>
+              <div class="pet-select-card" data-persona-pet="boba">
+                <span class="pet-emoji">🐶</span>
+                <span class="pet-name">Boba</span>
+                <span class="pet-id">boba · OpenAI</span>
+                <div class="check-circle"></div>
+              </div>
+              <div class="pet-select-card" data-persona-pet="pixel-frog">
+                <span class="pet-emoji">🐸</span>
+                <span class="pet-name">Pixel Frog</span>
+                <span class="pet-id">pixel-frog · Anthropic</span>
+                <div class="check-circle"></div>
+              </div>
+            </div>
+          </div>
+          <div class="field">
+            <label>API Key</label>
+            <select>
+              <option>DeepSeek (默认)</option>
+              <option>OpenAI</option>
+              <option>Anthropic</option>
+            </select>
+            <div class="field-hint">选择此宠物使用的 API Key</div>
+          </div>
+          <div class="field">
+            <label>模型</label>
+            <div class="combo-box" data-combo="persona-model">
+              <input value="DeepSeek-V3" placeholder="选择或输入模型名（留空使用默认）..." />
+              <span class="combo-arrow">▼</span>
+              <div class="combo-dropdown">
+                <div class="combo-option">DeepSeek-V3</div>
+                <div class="combo-option">DeepSeek-R1</div>
+                <div class="combo-option">deepseek-chat</div>
+              </div>
+            </div>
+            <div class="field-hint">可选，留空则使用该 Key 的默认模型</div>
+          </div>
+          <div class="field">
+            <label>人设 Prompt</label>
+            <textarea rows="4">你是一只可爱的桌面宠物猫，名叫小橘。你是主人的编程伙伴，用简短可爱的语气回应，每句话不超过30字。偶尔加个喵~</textarea>
+            <div class="field-hint" style="display:flex;justify-content:space-between;">
+              <span>68 / 500</span>
+              <span style="color:var(--mauve);cursor:pointer;">重置默认</span>
+            </div>
+          </div>
+          <div class="btn-row-end">
+            <button class="btn btn-primary">保存人设</button>
+          </div>
+        </div>
+
+        <!-- ===== 添加宠物 Panel ===== -->
+        <div class="tab-panel" id="panel-import">
+          <div class="import-tabs">
+            <div class="import-tab active" data-import-mode="dir">📁 Petdex 目录导入</div>
+            <div class="import-tab" data-import-mode="file">🖼️ 精灵图上传</div>
+          </div>
+          <div id="import-dir-mode">
+            <div class="field">
+              <label>选择 Petdex 宠物目录</label>
+              <input value="/Users/me/.petdex/pets/boba" readonly style="cursor:pointer;" />
+              <div class="field-hint">目录需包含 pet.json 和 spritesheet.webp</div>
+            </div>
+            <div class="status-row">
+              <span>📋</span>
+              <div>
+                <div style="font-weight:600;font-size:12px;">Boba</div>
+                <div style="font-size:10px;color:var(--overlay1);">boba · spritesheet 1536×1872 · petdex 格式</div>
+              </div>
+              <span style="margin-left:auto;font-size:10px;color:var(--green);">格式正确 ✓</span>
+            </div>
+            <button class="btn btn-primary" style="width:100%;">确认导入</button>
+          </div>
+          <div id="import-file-mode" class="hidden">
+            <div class="field">
+              <label>宠物名称</label>
+              <input placeholder="输入宠物名称" />
+            </div>
+            <div class="field">
+              <label>选择精灵图</label>
+              <input value="spritesheet.webp" readonly style="cursor:pointer;" />
+              <div class="field-hint">8列 × 192×208px，宽度 1536px，高度为 208px 整倍数</div>
+            </div>
+            <button class="btn btn-primary" style="width:100%;">确认添加</button>
+          </div>
+        </div>
+
+        <!-- ===== CC Hooks Panel ===== -->
+        <div class="tab-panel" id="panel-hooks">
+          <div class="status-row">
+            <span class="status-dot on"></span>
+            <div>
+              <div style="font-weight:600;">CC Hooks 已安装</div>
+              <div style="font-size:10px;color:var(--overlay1);">路径: ~/.claude/hooks/desktop-pet/notify.sh</div>
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--overlay1);line-height:1.6;margin-bottom:16px;">
+            <p>安装后，宠物会在以下 Claude Code 事件时展示反应：</p>
+            <table style="width:100%;margin-top:8px;border-collapse:collapse;font-size:11px;">
+              <thead>
+                <tr style="color:var(--subtext0);text-align:left;">
+                  <th style="padding:4px 8px;">Hook 事件</th>
+                  <th style="padding:4px 8px;">宠物动画</th>
+                  <th style="padding:4px 8px;">气泡示例</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td style="padding:3px 8px;color:var(--overlay1);">UserPromptSubmit</td><td style="padding:3px 8px;">review 思考</td><td style="padding:3px 8px;">"Thinking..."</td></tr>
+                <tr><td style="padding:3px 8px;color:var(--overlay1);">PostToolUse (Bash)</td><td style="padding:3px 8px;">running 快跑</td><td style="padding:3px 8px;">"Running command..."</td></tr>
+                <tr><td style="padding:3px 8px;color:var(--overlay1);">PostToolUse (Edit/Write)</td><td style="padding:3px 8px;">running</td><td style="padding:3px 8px;">"Editing code..."</td></tr>
+                <tr><td style="padding:3px 8px;color:var(--overlay1);">PostToolUse (WebFetch)</td><td style="padding:3px 8px;">review</td><td style="padding:3px 8px;">"Browsing..."</td></tr>
+                <tr><td style="padding:3px 8px;color:var(--overlay1);">PermissionRequest</td><td style="padding:3px 8px;">waiting 等待</td><td style="padding:3px 8px;">"Waiting..."</td></tr>
+                <tr><td style="padding:3px 8px;color:var(--overlay1);">PostCompact</td><td style="padding:3px 8px;">failed 摔倒</td><td style="padding:3px 8px;">"Compacted"</td></tr>
+                <tr><td style="padding:3px 8px;color:var(--overlay1);">SessionEnd</td><td style="padding:3px 8px;">waving 挥手</td><td style="padding:3px 8px;">"Done!"</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-danger">卸载 CC Hooks</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // === Menu ===
+  const menuItems = document.querySelectorAll('.menu-item');
+  let openMenu = null;
+
+  menuItems.forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const menuId = item.dataset.menu;
+      if (openMenu === menuId) { item.classList.remove('open'); openMenu = null; }
+      else {
+        if (openMenu) document.querySelector(`[data-menu="${openMenu}"]`)?.classList.remove('open');
+        item.classList.add('open'); openMenu = menuId;
+      }
+    });
+    item.addEventListener('mouseenter', () => {
+      if (openMenu && openMenu !== item.dataset.menu) {
+        document.querySelector(`[data-menu="${openMenu}"]`)?.classList.remove('open');
+        item.classList.add('open'); openMenu = item.dataset.menu;
+      }
+    });
+  });
+  document.addEventListener('click', () => {
+    if (openMenu) { document.querySelector(`[data-menu="${openMenu}"]`)?.classList.remove('open'); openMenu = null; }
+  });
+
+  // Menu state actions
+  document.querySelectorAll('.menu-dropdown-item[data-action]').forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const menu = item.closest('.menu-dropdown');
+      menu.querySelectorAll('.menu-dropdown-item[data-action] .check').forEach(c => c.textContent = '');
+      item.querySelector('.check').textContent = '●';
+      showToast(`触发: ${item.textContent.trim()}`);
+    });
+  });
+
+  // Menu pet switch
+  document.querySelectorAll('.menu-dropdown-item[data-pet]').forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (item.dataset.pet === 'remove') { showToast('已移除宠物'); return; }
+      const menu = item.closest('.menu-dropdown');
+      menu.querySelectorAll('.menu-dropdown-item[data-pet]').forEach(i => {
+        i.classList.remove('checked'); i.querySelector('.check').textContent = '';
+      });
+      item.classList.add('checked'); item.querySelector('.check').textContent = '●';
+      showToast(`已切换: ${item.textContent.trim()}`);
+    });
+  });
+
+  // === Settings Window ===
+  const settingsOverlay = document.getElementById('settings-overlay');
+  document.getElementById('close-window').addEventListener('click', () => settingsOverlay.classList.add('hidden'));
+  document.getElementById('open-settings-btn').addEventListener('click', () => settingsOverlay.classList.remove('hidden'));
+  settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) settingsOverlay.classList.add('hidden'); });
+
+  // Open settings tab from menu
+  document.querySelectorAll('.menu-dropdown-item[data-open-tab]').forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      settingsOverlay.classList.remove('hidden');
+      switchTab(item.dataset.openTab);
+      if (openMenu) { document.querySelector(`[data-menu="${openMenu}"]`)?.classList.remove('open'); openMenu = null; }
+    });
+  });
+
+  function switchTab(tabId) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    const tab = document.querySelector(`.tab[data-tab="${tabId}"]`);
+    const panel = document.getElementById(`panel-${tabId}`);
+    if (tab) tab.classList.add('active');
+    if (panel) panel.classList.add('active');
+  }
+  document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', () => switchTab(tab.dataset.tab)));
+
+  // === Idle Toggle ===
+  document.getElementById('idle-toggle').addEventListener('click', function() { this.classList.toggle('on'); });
+
+  // === Key Card Default Switching ===
+  document.querySelectorAll('.set-default').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetKey = btn.dataset.key;
+      // Reset all
+      document.querySelectorAll('.key-card').forEach(card => {
+        card.classList.remove('default');
+        card.querySelector('.default-badge').style.visibility = 'hidden';
+        card.querySelector('.set-default').disabled = false;
+        card.querySelector('.set-default').style.opacity = '1';
+      });
+      // Set new default
+      const card = document.querySelector(`.key-card[data-key="${targetKey}"]`);
+      card.classList.add('default');
+      card.querySelector('.default-badge').style.visibility = '';
+      card.querySelector('.set-default').disabled = true;
+      card.querySelector('.set-default').style.opacity = '0.4';
+      showToast(`${card.querySelector('.provider-name').textContent} 已设为默认`);
+    });
+  });
+
+  // === Delete Key ===
+  document.querySelectorAll('.delete-key').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const keyId = btn.dataset.key;
+      const card = document.querySelector(`.key-card[data-key="${keyId}"]`);
+      if (card.classList.contains('default')) {
+        showToast('不能删除默认 Key，请先设其他为默认');
+        return;
+      }
+      const name = card.querySelector('.provider-name').textContent;
+      card.style.animation = 'fadeSlideIn 0.25s ease-out reverse';
+      setTimeout(() => { card.remove(); showToast(`已移除 ${name}`); }, 200);
+    });
+  });
+
+  // === Add Key ===
+  document.getElementById('add-key-btn').addEventListener('click', () => {
+    showToast('添加 API Key — 选择服务商并输入 Key');
+  });
+
+  // === Show/Hide Key ===
+  document.querySelectorAll('.show-key').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = btn.parentElement.querySelector('input');
+      const wasPass = input.type === 'password';
+      input.type = wasPass ? 'text' : 'password';
+      btn.textContent = wasPass ? '🙈' : '👁';
+    });
+  });
+
+  // === Persona Pet Selection ===
+  document.querySelectorAll('.pet-select-card[data-persona-pet]').forEach(card => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.pet-select-card[data-persona-pet]').forEach(c => {
+        c.classList.remove('selected'); c.querySelector('.check-circle').textContent = '';
+      });
+      card.classList.add('selected'); card.querySelector('.check-circle').textContent = '✓';
+    });
+  });
+
+  // === Import Mode ===
+  document.querySelectorAll('.import-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.import-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('import-dir-mode').classList.toggle('hidden', tab.dataset.importMode !== 'dir');
+      document.getElementById('import-file-mode').classList.toggle('hidden', tab.dataset.importMode !== 'file');
+    });
+  });
+
+  // === Toast ===
+  function showToast(msg) {
+    const existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+    const toast = document.createElement('div');
+    toast.className = 'toast'; toast.textContent = msg;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 2000);
+  }
+
+  // === Combo Box ===
+  document.querySelectorAll('.combo-box').forEach(combo => {
+    const input = combo.querySelector('input');
+    const options = combo.querySelectorAll('.combo-option');
+
+    input.addEventListener('focus', () => combo.classList.add('open'));
+    input.addEventListener('input', () => combo.classList.add('open'));
+
+    // Close on click outside
+    document.addEventListener('click', (e) => {
+      if (!combo.contains(e.target)) combo.classList.remove('open');
+    });
+
+    input.addEventListener('blur', () => {
+      setTimeout(() => combo.classList.remove('open'), 150);
+    });
+
+    options.forEach(opt => {
+      opt.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        input.value = opt.textContent;
+        combo.classList.remove('open');
+        input.focus();
+      });
+    });
+
+    // Keyboard navigation
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const first = combo.querySelector('.combo-option');
+        first?.focus();
+      }
+      if (e.key === 'Enter') {
+        combo.classList.remove('open');
+      }
+    });
+  });
+
+  // === Keyboard ===
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === ',') { e.preventDefault(); settingsOverlay.classList.remove('hidden'); switchTab('ai'); }
+    if (e.key === 'Escape') settingsOverlay.classList.add('hidden');
+  });
+</script>
+</body>
+</html>
