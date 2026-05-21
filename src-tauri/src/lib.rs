@@ -257,8 +257,33 @@ fn discover_pets(app_handle: tauri::AppHandle) -> Vec<pets::ExternalPetRecord> {
         info!("created pets directory: {:?}", pet_root);
     }
 
-    let pets = pets::discover_pets(&pet_root);
+    let mut pets = pets::discover_pets(&pet_root);
     info!("discovered {} pet(s) in {:?}", pets.len(), pet_root);
+
+    // Also scan ~/.petdex/pets/ for petdex-installed pets
+    if let Some(home) = dirs::home_dir() {
+        let petdex_root = home.join(".petdex").join("pets");
+        if petdex_root.exists() {
+            let petdex_pets = pets::discover_pets(&petdex_root);
+            if !petdex_pets.is_empty() {
+                // Merge: app pets take precedence over petdex pets with same id
+                let app_ids: std::collections::HashSet<String> = pets
+                    .iter()
+                    .filter_map(|p| p.manifest.get("id").or_else(|| p.manifest.get("slug")).and_then(|v| v.as_str()).map(String::from))
+                    .collect();
+                for p in petdex_pets {
+                    let pid = p.manifest.get("id").or_else(|| p.manifest.get("slug"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    if !app_ids.contains(pid) {
+                        pets.push(p);
+                    }
+                }
+                info!("discovered {} pet(s) from ~/.petdex/pets/ (merged, {} total)", pets.len() - app_ids.len(), pets.len());
+            }
+        }
+    }
+
     pets
 }
 

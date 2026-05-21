@@ -27,7 +27,7 @@ export interface LoadedPet {
 
 export interface PetCatalogEntry {
   id: string;
-  source: 'built-in' | 'user';
+  source: 'built-in' | 'user' | 'petdex';
   manifest: PetManifest;
   spritesheetUrl: string;
   removable: boolean;

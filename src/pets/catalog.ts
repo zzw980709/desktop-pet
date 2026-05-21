@@ -13,14 +13,21 @@ function isBuiltIn(petId: string): boolean {
   return BUILTIN_PET_IDS.has(petId);
 }
 
+function detectSource(spritesheetPath: string, petId: string): PetCatalogEntry['source'] {
+  if (isBuiltIn(petId)) return 'built-in';
+  if (spritesheetPath.includes('/.petdex/pets/')) return 'petdex';
+  return 'user';
+}
+
 function resolvePetRecord(record: ExternalPetRecord): PetCatalogEntry | null {
   const manifest = validatePetManifest(record.manifest);
   if (!manifest) return null;
   if (!record.spritesheetPath) return null;
 
+  const source = detectSource(record.spritesheetPath, manifest.id);
   return {
     id: manifest.id,
-    source: isBuiltIn(manifest.id) ? 'built-in' : 'user',
+    source,
     manifest,
     spritesheetUrl: convertFileSrc(record.spritesheetPath),
     removable: !isBuiltIn(manifest.id),
