@@ -418,23 +418,18 @@ fn add_pet_from_spritesheet(
         Ok(data) => {
             match pets::read_image_dimensions(&data) {
                 Some((w, h))
-                    if (w == pets::EXPECTED_SPRITESHEET_W
+                    if w == pets::EXPECTED_SPRITESHEET_W
                         && h >= pets::EXPECTED_SPRITESHEET_MIN_H
-                        && h % pets::CELL_H == 0)
-                    || (w == pets::EXPECTED_SPRITESHEET_W_PETDEX
-                        && h >= pets::EXPECTED_SPRITESHEET_MIN_H_PETDEX
-                        && h % pets::CELL_H == 0) => {}
+                        && h % pets::CELL_H == 0 => {}
                 Some((w, h)) => {
                     return AddPetResult {
                         success: false,
                         pet_id: None,
                         error: Some(format!(
-                            "精灵表尺寸不符：宽度须 {}px（桌面宠物格式）或 {}px（Petdex格式），高度须为 {}px 的整倍数（最低分别为 {}px 或 {}px），实际 {}x{}",
+                            "精灵表尺寸不符：宽度须 {}px，高度须为 {}px 的整倍数（最低 {}px），实际 {}x{}",
                             pets::EXPECTED_SPRITESHEET_W,
-                            pets::EXPECTED_SPRITESHEET_W_PETDEX,
                             pets::CELL_H,
                             pets::EXPECTED_SPRITESHEET_MIN_H,
-                            pets::EXPECTED_SPRITESHEET_MIN_H_PETDEX,
                             w,
                             h
                         )),
@@ -651,21 +646,17 @@ fn import_petdex_package(
         Ok(data) => {
             match pets::read_image_dimensions(&data) {
                 Some((w, h))
-                    if (w == pets::EXPECTED_SPRITESHEET_W
+                    if w == pets::EXPECTED_SPRITESHEET_W
                         && h >= pets::EXPECTED_SPRITESHEET_MIN_H
-                        && h % pets::CELL_H == 0)
-                    || (w == pets::EXPECTED_SPRITESHEET_W_PETDEX
-                        && h >= pets::EXPECTED_SPRITESHEET_MIN_H_PETDEX
-                        && h % pets::CELL_H == 0) => {}
+                        && h % pets::CELL_H == 0 => {}
                 Some((w, h)) => {
                     let _ = fs::remove_dir_all(&dest_dir);
                     return AddPetResult {
                         success: false, pet_id: None,
                         error: Some(format!(
-                            "精灵表尺寸不符：实际 {}x{}，需为 {}px 或 {}px 宽，高为 {}px 的整倍数",
+                            "精灵表尺寸不符：实际 {}x{}，需 {}px 宽，高为 {}px 的整倍数",
                             w, h,
                             pets::EXPECTED_SPRITESHEET_W,
-                            pets::EXPECTED_SPRITESHEET_W_PETDEX,
                             pets::CELL_H
                         )),
                     };

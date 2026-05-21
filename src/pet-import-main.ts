@@ -61,13 +61,8 @@ function updateConfirm(): void {
 function validateDimensions(img: HTMLImageElement): { ok: boolean; msg: string } {
   const w = img.naturalWidth;
   const h = img.naturalHeight;
-  if (w === 1728) {
-    if (h < 1664) return { ok: false, msg: `Petdex 格式高度至少 1664px，实际 ${h}px` };
-    if (h % 208 !== 0) return { ok: false, msg: `高度须为 208px 的整倍数，实际 ${h}px` };
-    return { ok: true, msg: '' };
-  }
-  if (w !== 1536) return { ok: false, msg: `宽度须为 1536px（桌面宠物）或 1728px（Petdex），实际 ${w}px` };
-  if (h < 1872) return { ok: false, msg: `高度至少 1872px，实际 ${h}px` };
+  if (w !== 1536) return { ok: false, msg: `宽度须为 1536px，实际 ${w}px` };
+  if (h < 1664) return { ok: false, msg: `高度至少 1664px，实际 ${h}px` };
   if (h % 208 !== 0) return { ok: false, msg: `高度须为 208px 的整倍数，实际 ${h}px` };
   return { ok: true, msg: '' };
 }

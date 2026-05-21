@@ -25,6 +25,7 @@ function resolvePetRecord(record: ExternalPetRecord): PetCatalogEntry | null {
   if (!record.spritesheetPath) return null;
 
   const source = detectSource(record.spritesheetPath, manifest.id);
+  manifest.atlasFormat = source === 'petdex' ? 'petdex' : 'desktop-pet';
   return {
     id: manifest.id,
     source,
