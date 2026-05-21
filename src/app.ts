@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
+import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window';
 import { LogicalPosition } from '@tauri-apps/api/dpi';
 import { loadPet } from './engine/loader';
@@ -360,7 +360,14 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
         {
           const nextPet = pets.find((pet) => pet.id === action.petId);
           if (nextPet) {
-            await switchPet(nextPet);
+            const switched = await switchPet(nextPet);
+            if (switched) {
+              void emit('chat-pet-changed', {
+                petId: nextPet.id,
+                petName: nextPet.manifest.displayName,
+                petEmoji: nextPet.id === 'cat' ? '🐱' : '🐾',
+              });
+            }
           }
         }
         break;
@@ -432,7 +439,11 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
     const now = performance.now();
     if (now - chatClickTimer < 300) return;
     chatClickTimer = now;
-    void invoke('open_chat_window');
+    void invoke('open_chat_window', {
+      petId: activePet.id,
+      petName: activePet.manifest.displayName,
+      petEmoji: activePet.id === 'cat' ? '🐱' : '🐾',
+    });
   });
 
   window.addEventListener('mouseup', () => {

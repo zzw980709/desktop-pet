@@ -62,11 +62,19 @@ fn init_database(app_data: &PathBuf) -> Connection {
 
         CREATE TABLE IF NOT EXISTS chat_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pet_id TEXT NOT NULL DEFAULT 'cat',
             role TEXT NOT NULL,
             content TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );"
     ).expect("failed to create tables");
+
+    // Migrate chat_history to add pet_id (added in 0.1.0+)
+    // Ignore error if column already exists
+    let _ = conn.execute(
+        "ALTER TABLE chat_history ADD COLUMN pet_id TEXT NOT NULL DEFAULT 'cat'",
+        [],
+    );
 
     // Migrate from old preferences.json
     let json_path = app_data.join("preferences.json");
@@ -1096,17 +1104,17 @@ fn check_cc_hooks_status() -> CcHookStatus {
 }
 
 #[tauri::command]
-fn save_chat_message(app_handle: tauri::AppHandle, role: String, content: String) -> Result<(), String> {
+fn save_chat_message(app_handle: tauri::AppHandle, pet_id: String, role: String, content: String) -> Result<(), String> {
     let state = app_handle.state::<Mutex<Connection>>();
     let db = state.lock().unwrap();
     db.execute(
-        "INSERT INTO chat_history (role, content) VALUES (?1, ?2)",
-        rusqlite::params![role, content],
+        "INSERT INTO chat_history (pet_id, role, content) VALUES (?1, ?2, ?3)",
+        rusqlite::params![pet_id, role, content],
     ).map_err(|e| e.to_string())?;
-    // Keep only last 10 messages
+    // Keep only last 10 messages per pet
     db.execute(
-        "DELETE FROM chat_history WHERE id NOT IN (SELECT id FROM chat_history ORDER BY id DESC LIMIT 10)",
-        [],
+        "DELETE FROM chat_history WHERE pet_id = ?1 AND id NOT IN (SELECT id FROM chat_history WHERE pet_id = ?1 ORDER BY id DESC LIMIT 10)",
+        rusqlite::params![pet_id],
     ).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -1118,14 +1126,14 @@ struct ChatHistoryEntry {
 }
 
 #[tauri::command]
-fn load_chat_history(app_handle: tauri::AppHandle) -> Vec<ChatHistoryEntry> {
+fn load_chat_history(app_handle: tauri::AppHandle, pet_id: String) -> Vec<ChatHistoryEntry> {
     let state = app_handle.state::<Mutex<Connection>>();
     let db = state.lock().unwrap();
-    let mut stmt = match db.prepare("SELECT role, content FROM chat_history ORDER BY id ASC") {
+    let mut stmt = match db.prepare("SELECT role, content FROM chat_history WHERE pet_id = ?1 ORDER BY id ASC") {
         Ok(s) => s,
         Err(_) => return vec![],
     };
-    let rows = stmt.query_map([], |row| {
+    let rows = stmt.query_map(rusqlite::params![pet_id], |row| {
         Ok(ChatHistoryEntry {
             role: row.get(0)?,
             content: row.get(1)?,
@@ -1138,8 +1146,18 @@ fn load_chat_history(app_handle: tauri::AppHandle) -> Vec<ChatHistoryEntry> {
 }
 
 #[tauri::command]
-fn open_chat_window(app_handle: tauri::AppHandle) {
+fn open_chat_window(app_handle: tauri::AppHandle, pet_id: String, pet_name: String, pet_emoji: String) {
+    let escaped_id = pet_id.replace('\\', "\\\\").replace('\'', "\\'");
+    let escaped_name = pet_name.replace('\\', "\\\\").replace('\'', "\\'");
+    let escaped_emoji = pet_emoji.replace('\\', "\\\\").replace('\'', "\\'");
+
     if let Some(win) = app_handle.get_webview_window("chat") {
+        let js = format!(
+            "window.__chatPetId='{}';window.__chatPetName='{}';window.__chatPetEmoji='{}';if(typeof initChat==='function')initChat('{}','{}','{}')",
+            escaped_id, escaped_name, escaped_emoji,
+            escaped_id, escaped_name, escaped_emoji,
+        );
+        let _ = win.eval(&js);
         let _ = win.show();
         let _ = win.set_focus();
         return;
@@ -1162,7 +1180,7 @@ fn open_chat_window(app_handle: tauri::AppHandle) {
         }
     }
 
-    let _ = tauri::WebviewWindowBuilder::new(
+    let builder = tauri::WebviewWindowBuilder::new(
         &app_handle,
         "chat",
         tauri::WebviewUrl::App("chat.html".into()),
@@ -1171,8 +1189,15 @@ fn open_chat_window(app_handle: tauri::AppHandle) {
     .inner_size(340.0, 440.0)
     .position(x, y)
     .resizable(false)
-    .skip_taskbar(true)
-    .build();
+    .skip_taskbar(true);
+
+    if let Ok(w) = builder.build() {
+        let js = format!(
+            "window.__chatPetId='{}';window.__chatPetName='{}';window.__chatPetEmoji='{}'",
+            escaped_id, escaped_name, escaped_emoji,
+        );
+        let _ = w.eval(&js);
+    }
 }
 
 #[tauri::command]

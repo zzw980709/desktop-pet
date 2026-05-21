@@ -14,15 +14,21 @@ export function setConfig(c: AiConfig | null): void {
 }
 export function getConfig(): AiConfig | null { return aiConfig; }
 
+let currentPetId = 'cat';
+
+export function setPetId(petId: string): void {
+  currentPetId = petId;
+}
+
 export function addToHistory(role: 'user' | 'assistant', content: string): void {
   chatHistory.push({ role, content });
   if (chatHistory.length > MAX_HISTORY) chatHistory = chatHistory.slice(-MAX_HISTORY);
-  void invoke('save_chat_message', { role, content });
+  void invoke('save_chat_message', { petId: currentPetId, role, content });
 }
 
 export async function loadHistory(): Promise<void> {
   try {
-    const entries = await invoke<Array<{ role: string; content: string }>>('load_chat_history');
+    const entries = await invoke<Array<{ role: string; content: string }>>('load_chat_history', { petId: currentPetId });
     chatHistory = entries.map((e) => ({ role: e.role as 'user' | 'assistant', content: e.content }));
   } catch {
     chatHistory = [];

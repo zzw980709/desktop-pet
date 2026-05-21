@@ -12,12 +12,16 @@ const inputEl = document.getElementById('chat-input')! as HTMLTextAreaElement;
 const sendBtn = document.getElementById('chat-send-btn')! as HTMLButtonElement;
 const expandBtn = document.getElementById('chat-expand-btn')!;
 const closeBtn = document.getElementById('chat-close-btn')!;
+const headerEmoji = document.getElementById('chat-header-emoji')!;
 const headerName = document.getElementById('chat-header-name')!;
 const headerSub = document.getElementById('chat-header-sub')!;
 const sidebarList = document.getElementById('sidebar-list')!;
 
 let sending = false;
 let isFullMode = false;
+let currentPetId = 'cat';
+let currentPetName = '小橘';
+let currentPetEmoji = '🐱';
 
 function scrollToBottom(): void {
   messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -65,9 +69,14 @@ function updateSidebar(entries: HistoryEntry[]): void {
   }
 }
 
+function updateHeader(): void {
+  headerEmoji.textContent = currentPetEmoji;
+  headerName.textContent = currentPetName;
+}
+
 async function loadHistory(): Promise<void> {
   try {
-    const entries = await invoke<HistoryEntry[]>('load_chat_history');
+    const entries = await invoke<HistoryEntry[]>('load_chat_history', { petId: currentPetId });
     renderMessages(entries);
     updateSidebar(entries);
   } catch {
@@ -96,7 +105,7 @@ async function sendMessage(): Promise<void> {
   inputEl.value = '';
 
   appendMessage('user', msg);
-  void invoke('save_chat_message', { role: 'user', content: msg });
+  void invoke('save_chat_message', { petId: currentPetId, role: 'user', content: msg });
 
   if (isFullMode) {
     const loadingEl = appendMessage('loading', '');
@@ -120,7 +129,7 @@ async function sendMessage(): Promise<void> {
     }
     unlisten();
     if (reply) {
-      void invoke('save_chat_message', { role: 'assistant', content: reply });
+      void invoke('save_chat_message', { petId: currentPetId, role: 'assistant', content: reply });
     }
   } else {
     const loadingEl = appendMessage('loading', '');
@@ -130,7 +139,7 @@ async function sendMessage(): Promise<void> {
       });
       loadingEl.remove();
       appendMessage('assistant', reply);
-      void invoke('save_chat_message', { role: 'assistant', content: reply });
+      void invoke('save_chat_message', { petId: currentPetId, role: 'assistant', content: reply });
     } catch (e) {
       loadingEl.remove();
       appendMessage('error', String(e));
@@ -141,6 +150,15 @@ async function sendMessage(): Promise<void> {
   sendBtn.disabled = false;
   inputEl.focus();
 }
+
+// Called from Rust via eval when switching pets
+(window as any).initChat = function (petId: string, petName: string, petEmoji: string): void {
+  currentPetId = petId;
+  currentPetName = petName;
+  currentPetEmoji = petEmoji;
+  updateHeader();
+  void loadHistory();
+};
 
 inputEl.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
@@ -164,7 +182,7 @@ expandBtn.addEventListener('click', async () => {
     headerSub.style.display = '';
     expandBtn.textContent = '⤢';
     expandBtn.title = '收缩';
-    const entries = await invoke<HistoryEntry[]>('load_chat_history');
+    const entries = await invoke<HistoryEntry[]>('load_chat_history', { petId: currentPetId });
     updateSidebar(entries);
   } else {
     isFullMode = false;
@@ -184,4 +202,20 @@ document.getElementById('sidebar-new-btn')?.addEventListener('click', () => {
   sidebarList.innerHTML = '';
 });
 
+// Listen for pet change events from main window
+void listen<{ petId: string; petName: string; petEmoji: string }>('chat-pet-changed', (event) => {
+  currentPetId = event.payload.petId;
+  currentPetName = event.payload.petName;
+  currentPetEmoji = event.payload.petEmoji;
+  updateHeader();
+  void loadHistory();
+});
+
+// Initialize from Rust-set globals (or defaults)
+if ((window as any).__chatPetId) {
+  currentPetId = (window as any).__chatPetId;
+  currentPetName = (window as any).__chatPetName;
+  currentPetEmoji = (window as any).__chatPetEmoji;
+}
+updateHeader();
 void loadHistory();
