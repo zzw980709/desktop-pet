@@ -78,18 +78,58 @@
       }
       button.primary:hover { background: rgba(99,168,255,0.25); }
       button:disabled { opacity: 0.4; cursor: default; }
+      .mode-tabs {
+        display: flex;
+        gap: 4px;
+      }
+      .mode-tab {
+        flex: 1;
+        min-height: 28px;
+        padding: 4px 8px;
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 8px;
+        background: rgba(255,255,255,0.02);
+        color: rgba(160,184,220,0.5);
+        font-size: 11px;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .mode-tab.active {
+        border-color: rgba(99,168,255,0.3);
+        background: rgba(99,168,255,0.1);
+        color: #9cc4ff;
+      }
+      .pet-preview {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: rgba(99,168,255,0.06);
+        border: 1px solid rgba(99,168,255,0.1);
+      }
+      .pet-name { font-size: 14px; font-weight: 600; color: #f3f7ff; }
+      .pet-desc { font-size: 11px; color: rgba(157,173,204,0.7); }
     </style>
     <title>添加宠物</title>
   </head>
   <body>
     <div class="dialog">
       <div class="title">添加新宠物</div>
-      <button class="pick-btn" id="pick-btn">选择精灵图...</button>
+      <div class="mode-tabs">
+        <button class="mode-tab active" id="tab-dir">导入 Petdex 目录</button>
+        <button class="mode-tab" id="tab-file">上传精灵图</button>
+      </div>
+      <button class="pick-btn" id="pick-btn">选择 Petdex 宠物目录...</button>
       <div class="file-info" id="file-info"></div>
-      <input id="name-input" placeholder="输入宠物名称" maxlength="30" />
+      <input id="name-input" placeholder="输入宠物名称" maxlength="30" style="display:none" />
+      <div class="pet-preview" id="pet-preview" style="display:none">
+        <span class="pet-name" id="pet-name"></span>
+        <span class="pet-desc" id="pet-desc"></span>
+      </div>
       <div class="actions">
         <button id="cancel-btn">取消</button>
-        <button id="confirm-btn" class="primary" disabled>确认添加</button>
+        <button id="confirm-btn" class="primary" disabled>确认导入</button>
       </div>
     </div>
     <script type="module" src="/src/pet-import-main.ts"></script>

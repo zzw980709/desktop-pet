@@ -339,6 +339,28 @@ async fn pick_spritesheet(app_handle: tauri::AppHandle) -> Result<Option<String>
     }
 }
 
+#[tauri::command]
+async fn pick_petdex_directory(app_handle: tauri::AppHandle) -> Result<Option<String>, String> {
+    info!("pick_petdex_directory: opening folder dialog");
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app_handle
+        .dialog()
+        .file()
+        .set_title("选择 Petdex 宠物目录")
+        .pick_folder(move |folder_path| {
+            let _ = tx.send(folder_path);
+        });
+    let folder_path = rx.await.unwrap_or(None);
+
+    match folder_path {
+        Some(f) => match f.into_path() {
+            Ok(p) => Ok(Some(p.to_string_lossy().to_string())),
+            Err(_) => Err("无法解析目录路径".into()),
+        },
+        None => Ok(None),
+    }
+}
+
 fn generate_pet_id(display_name: &str) -> String {
     let id: String = display_name
         .to_lowercase()
@@ -488,6 +510,181 @@ fn add_pet_from_spritesheet(
         pet_id: Some(pet_id),
         error: None,
     }
+}
+
+#[tauri::command]
+fn import_petdex_package(
+    app_handle: tauri::AppHandle,
+    source_dir: String,
+) -> AddPetResult {
+    info!("import_petdex_package: source_dir={}", source_dir);
+
+    let source = std::path::PathBuf::from(&source_dir);
+    if !source.exists() || !source.is_dir() {
+        return AddPetResult {
+            success: false,
+            pet_id: None,
+            error: Some("所选目录不存在".into()),
+        };
+    }
+
+    let manifest_path = source.join("pet.json");
+    let spritesheet_path = source.join("spritesheet.webp");
+
+    if !manifest_path.exists() {
+        return AddPetResult {
+            success: false,
+            pet_id: None,
+            error: Some("目录中缺少 pet.json".into()),
+        };
+    }
+    if !spritesheet_path.exists() {
+        return AddPetResult {
+            success: false,
+            pet_id: None,
+            error: Some("目录中缺少 spritesheet.webp".into()),
+        };
+    }
+
+    // Read pet.json to get pet id
+    let manifest_content = match fs::read_to_string(&manifest_path) {
+        Ok(c) => c,
+        Err(e) => return AddPetResult {
+            success: false, pet_id: None,
+            error: Some(format!("无法读取 pet.json: {}", e)),
+        },
+    };
+    let manifest: serde_json::Value = match serde_json::from_str(&manifest_content) {
+        Ok(m) => m,
+        Err(e) => return AddPetResult {
+            success: false, pet_id: None,
+            error: Some(format!("pet.json 格式错误: {}", e)),
+        },
+    };
+
+    // Accept both 'id' and 'slug' fields (petdex uses slug)
+    let raw_id = manifest.get("id")
+        .or_else(|| manifest.get("slug"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let pet_id = if raw_id.is_empty() {
+        generate_pet_id(
+            manifest.get("displayName")
+                .or_else(|| manifest.get("name"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("custom-pet")
+        )
+    } else {
+        generate_pet_id(raw_id)
+    };
+
+    let Ok(app_data) = app_handle.path().app_data_dir() else {
+        return AddPetResult {
+            success: false, pet_id: None,
+            error: Some("无法获取应用数据目录".into()),
+        };
+    };
+
+    let dest_dir = app_data.join("pets").join(&pet_id);
+    if dest_dir.exists() {
+        return AddPetResult {
+            success: false,
+            pet_id: Some(pet_id.clone()),
+            error: Some(format!("宠物 \"{}\" 已存在", pet_id)),
+        };
+    }
+
+    // Copy entire directory
+    match copy_dir_recursive(&source, &dest_dir) {
+        Ok(_) => {}
+        Err(e) => {
+            let _ = fs::remove_dir_all(&dest_dir);
+            return AddPetResult {
+                success: false, pet_id: None,
+                error: Some(format!("复制目录失败: {}", e)),
+            };
+        }
+    }
+
+    // Ensure pet.json has spritesheetPath = "spritesheet.webp" (normalize on import)
+    let normalized_manifest = serde_json::json!({
+        "id": pet_id,
+        "displayName": manifest.get("displayName").or_else(|| manifest.get("name")).and_then(|v| v.as_str()).unwrap_or(&pet_id),
+        "description": manifest.get("description").and_then(|v| v.as_str()).unwrap_or(""),
+        "spritesheetPath": "spritesheet.webp",
+    });
+    if fs::write(dest_dir.join("pet.json"), serde_json::to_string_pretty(&normalized_manifest).unwrap()).is_err() {
+        let _ = fs::remove_dir_all(&dest_dir);
+        return AddPetResult {
+            success: false, pet_id: None,
+            error: Some("无法写入 pet.json".into()),
+        };
+    }
+
+    // Validate spritesheet dimensions
+    match fs::read(&dest_dir.join("spritesheet.webp")) {
+        Ok(data) => {
+            match pets::read_image_dimensions(&data) {
+                Some((w, h))
+                    if (w == pets::EXPECTED_SPRITESHEET_W
+                        && h >= pets::EXPECTED_SPRITESHEET_MIN_H
+                        && h % pets::CELL_H == 0)
+                    || (w == pets::EXPECTED_SPRITESHEET_W_PETDEX
+                        && h >= pets::EXPECTED_SPRITESHEET_MIN_H_PETDEX
+                        && h % pets::CELL_H == 0) => {}
+                Some((w, h)) => {
+                    let _ = fs::remove_dir_all(&dest_dir);
+                    return AddPetResult {
+                        success: false, pet_id: None,
+                        error: Some(format!(
+                            "精灵表尺寸不符：实际 {}x{}，需为 {}px 或 {}px 宽，高为 {}px 的整倍数",
+                            w, h,
+                            pets::EXPECTED_SPRITESHEET_W,
+                            pets::EXPECTED_SPRITESHEET_W_PETDEX,
+                            pets::CELL_H
+                        )),
+                    };
+                }
+                None => {
+                    let _ = fs::remove_dir_all(&dest_dir);
+                    return AddPetResult {
+                        success: false, pet_id: None,
+                        error: Some("无法解析精灵图尺寸".into()),
+                    };
+                }
+            }
+        }
+        Err(e) => {
+            let _ = fs::remove_dir_all(&dest_dir);
+            return AddPetResult {
+                success: false, pet_id: None,
+                error: Some(format!("无法读取精灵图: {}", e)),
+            };
+        }
+    }
+
+    info!("import_petdex_package: successfully imported pet '{}'", pet_id);
+    AddPetResult {
+        success: true,
+        pet_id: Some(pet_id),
+        error: None,
+    }
+}
+
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if file_type.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else {
+            fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1054,7 +1251,7 @@ fn open_pet_import_window(app_handle: tauri::AppHandle) {
         tauri::WebviewUrl::App("pet-import.html".into()),
     )
     .title("添加宠物")
-    .inner_size(340.0, 290.0)
+    .inner_size(340.0, 360.0)
     .resizable(false)
     .build();
 }
@@ -1070,7 +1267,9 @@ pub fn run() {
             load_preferences,
             save_preferences,
             pick_spritesheet,
+            pick_petdex_directory,
             add_pet_from_spritesheet,
+            import_petdex_package,
             remove_pet,
             install_cc_hooks,
             uninstall_cc_hooks,
