@@ -2,7 +2,13 @@ use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 use tracing::info;
 
-use crate::{AiConfig, ChatMessage};
+use crate::ChatMessage;
+
+pub struct AiConnection {
+    pub api_key: String,
+    pub base_url: String,
+    pub model: String,
+}
 
 #[derive(Debug)]
 pub enum AiError {
@@ -58,20 +64,20 @@ struct ErrorDetail {
 }
 
 pub async fn chat(
-    config: &AiConfig,
+    conn: &AiConnection,
     messages: &[ChatMessage],
     timeout_secs: u64,
 ) -> Result<String, AiError> {
-    let url = format!("{}/v1/chat/completions", config.base_url.trim_end_matches('/'));
+    let url = format!("{}/v1/chat/completions", conn.base_url.trim_end_matches('/'));
 
     let request_body = ChatRequest {
-        model: config.model.clone(),
+        model: conn.model.clone(),
         messages: messages.to_vec(),
         stream: false,
         max_tokens: Some(256),
     };
 
-    info!("ai::chat to {} model {}", url, config.model);
+    info!("ai::chat to {} model {}", url, conn.model);
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(timeout_secs))
@@ -81,7 +87,7 @@ pub async fn chat(
     let response = client
         .post(&url)
         .header("Content-Type", "application/json")
-        .header("Authorization", format!("Bearer {}", config.api_key))
+        .header("Authorization", format!("Bearer {}", conn.api_key))
         .json(&request_body)
         .send()
         .await
@@ -119,15 +125,15 @@ pub async fn chat(
 }
 
 pub async fn chat_stream(
-    config: &AiConfig,
+    conn: &AiConnection,
     messages: &[ChatMessage],
     timeout_secs: u64,
     app_handle: &tauri::AppHandle,
 ) -> Result<String, AiError> {
-    let url = format!("{}/v1/chat/completions", config.base_url.trim_end_matches('/'));
+    let url = format!("{}/v1/chat/completions", conn.base_url.trim_end_matches('/'));
 
     let request_body = serde_json::json!({
-        "model": config.model,
+        "model": conn.model,
         "messages": messages.iter().map(|m| serde_json::json!({
             "role": m.role,
             "content": m.content,
@@ -143,7 +149,7 @@ pub async fn chat_stream(
 
     let response = client
         .post(&url)
-        .header("Authorization", format!("Bearer {}", config.api_key))
+        .header("Authorization", format!("Bearer {}", conn.api_key))
         .header("Content-Type", "application/json")
         .json(&request_body)
         .send()

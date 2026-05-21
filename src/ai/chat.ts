@@ -1,46 +1,31 @@
-import { invoke } from '@tauri-apps/api/core';
 import type { AiConfig } from '../types';
 
-const MAX_HISTORY = 10;
-
-interface HistoryMessage { role: 'user' | 'assistant'; content: string; }
-
-let chatHistory: HistoryMessage[] = [];
 let aiConfig: AiConfig | null = null;
 
 export function setConfig(c: AiConfig | null): void {
   aiConfig = c;
   if (c) loadHistory();
 }
-export function getConfig(): AiConfig | null { return aiConfig; }
 
-let currentPetId = 'cat';
-
-export function setPetId(petId: string): void {
-  currentPetId = petId;
+export function getConfig(): AiConfig | null {
+  return aiConfig;
 }
 
-export function addToHistory(role: 'user' | 'assistant', content: string): void {
-  chatHistory.push({ role, content });
-  if (chatHistory.length > MAX_HISTORY) chatHistory = chatHistory.slice(-MAX_HISTORY);
-  void invoke('save_chat_message', { petId: currentPetId, role, content });
+export function isConfigValid(): boolean {
+  if (!aiConfig) return false;
+  return aiConfig.apiKeys.some((k) => k.apiKey.length > 0);
+}
+
+export function getDefaultModel(): string {
+  const defaultKey = aiConfig?.apiKeys.find((k) => k.isDefault);
+  if (defaultKey) return defaultKey.defaultModel;
+  return aiConfig?.apiKeys[0]?.defaultModel ?? '';
 }
 
 export async function loadHistory(): Promise<void> {
-  try {
-    const entries = await invoke<Array<{ role: string; content: string }>>('load_chat_history', { petId: currentPetId });
-    chatHistory = entries.map((e) => ({ role: e.role as 'user' | 'assistant', content: e.content }));
-  } catch {
-    chatHistory = [];
-  }
+  // no-op: history is loaded per-pet by chat-main.ts
 }
 
 export function buildMessages(userMessage: string): Array<{ role: string; content: string }> {
-  if (!aiConfig) return [];
-  const msgs: Array<{ role: string; content: string }> = [
-    { role: 'system', content: aiConfig.systemPrompt },
-  ];
-  for (const h of chatHistory) msgs.push({ role: h.role, content: h.content });
-  msgs.push({ role: 'user', content: userMessage });
-  return msgs;
+  return [{ role: 'user', content: userMessage }];
 }

@@ -1,324 +1,391 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body {
-        width: 100%; height: 100%;
-        background: #1e1e2e;
-        overflow-y: auto;
-        overflow-x: hidden;
-      }
-      .ai-settings-panel {
-        width: 100%;
-        height: 100%;
-        padding: 28px 32px;
-        color: #cdd6f4;
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-      }
-      .ai-settings-header {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 24px;
-      }
-      .ai-settings-icon { font-size: 28px; }
-      .ai-settings-title { font-size: 15px; font-weight: 600; color: #fff; }
-      .ai-settings-subtitle { font-size: 11px; color: #a6adc8; }
-      .ai-status-dot {
-        margin-left: auto;
-        width: 8px; height: 8px;
-        border-radius: 50%;
-        background: #585b70;
-        transition: background 0.3s;
-      }
-      .ai-status-dot.connected { background: #a6e3a1; }
-      .ai-status-dot.error { background: #f38ba8; }
-      .ai-settings-field {
-        margin-bottom: 16px;
-      }
-      .ai-settings-field label {
-        display: block;
-        font-size: 11px;
-        font-weight: 500;
-        color: #a6adc8;
-        margin-bottom: 6px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-      .ai-settings-field input,
-      .ai-settings-field select,
-      .ai-settings-field textarea {
-        width: 100%;
-        padding: 10px 12px;
-        background: #313244;
-        border: 1px solid #45475a;
-        border-radius: 8px;
-        color: #cdd6f4;
-        font-size: 13px;
-        outline: none;
-        box-sizing: border-box;
-        font-family: inherit;
-        user-select: text;
-      }
-      .ai-settings-field textarea {
-        resize: vertical;
-        line-height: 1.5;
-        font-family: 'SF Mono', Monaco, monospace;
-      }
-      .ai-settings-field select {
-        cursor: pointer;
-        appearance: none;
-      }
-      .ai-input-wrap {
-        position: relative;
-      }
-      .ai-input-wrap input {
-        padding-right: 36px;
-      }
-      .ai-eye {
-        position: absolute;
-        right: 10px;
-        top: 50%;
-        transform: translateY(-50%);
-        cursor: pointer;
-        font-size: 14px;
-        opacity: 0.6;
-      }
-      .ai-settings-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 12px;
-      }
-      .ai-field-meta {
-        display: flex;
-        justify-content: space-between;
-        margin-top: 4px;
-        font-size: 10px;
-        color: #585b70;
-      }
-      .ai-field-meta span:last-child {
-        cursor: pointer;
-        color: #7c4dff;
-      }
-      .ai-field-hint {
-        display: block;
-        font-size: 11px;
-        color: #a6adc8;
-      }
-      .ai-settings-divider {
-        height: 1px;
-        background: #313244;
-        margin: 16px 0;
-      }
-      .ai-toggle-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-      .ai-toggle-row label {
-        margin-bottom: 2px;
-        text-transform: none;
-        font-size: 13px;
-        color: #cdd6f4;
-      }
-      .ai-toggle {
-        width: 44px;
-        height: 24px;
-        border-radius: 12px;
-        background: #585b70;
-        position: relative;
-        cursor: pointer;
-        transition: background 0.2s;
-        flex-shrink: 0;
-      }
-      .ai-toggle.on {
-        background: #a6e3a1;
-      }
-      .ai-toggle::after {
-        content: '';
-        position: absolute;
-        top: 2px;
-        left: 2px;
-        width: 20px;
-        height: 20px;
-        border-radius: 50%;
-        background: #fff;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-        transition: transform 0.2s;
-      }
-      .ai-toggle.on::after {
-        transform: translateX(20px);
-      }
-      .ai-interval-wrap {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 12px;
-        background: #313244;
-        border-radius: 8px;
-      }
-      .ai-interval-wrap input {
-        width: 60px;
-        padding: 4px 8px;
-        background: #1e1e2e;
-        border: 1px solid #45475a;
-        border-radius: 6px;
-        color: #cdd6f4;
-        font-size: 13px;
-        text-align: center;
-      }
-      .ai-interval-unit { font-size: 12px; color: #a6adc8; }
-      .ai-interval-hint { margin-left: auto; font-size: 11px; color: #585b70; }
-      .ai-settings-actions {
-        display: flex;
-        gap: 10px;
-        margin-top: 20px;
-      }
-      .ai-settings-actions button {
-        flex: 1;
-        padding: 10px 16px;
-        border-radius: 8px;
-        font-size: 13px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.15s;
-        border: none;
-        font-family: inherit;
-      }
-      .ai-settings-actions button:first-child {
-        background: #313244;
-        border: 1px solid #45475a;
-        color: #cdd6f4;
-      }
-      .ai-settings-actions button.primary {
-        background: linear-gradient(135deg, #4fc3f7, #7c4dff);
-        color: #fff;
-        font-weight: 600;
-      }
-      .ai-status-bar {
-        margin-top: 14px;
-        padding: 8px 12px;
-        border-radius: 6px;
-        font-size: 11px;
-        text-align: center;
-        display: none;
-      }
-      .ai-status-bar.show { display: block; }
-      .ai-status-bar.ok {
-        background: rgba(166,227,161,0.1);
-        border: 1px solid rgba(166,227,161,0.2);
-        color: #a6e3a1;
-      }
-      .ai-status-bar.err {
-        background: rgba(243,139,168,0.1);
-        border: 1px solid rgba(243,139,168,0.2);
-        color: #f38ba8;
-      }
-      .ai-hooks-status {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 13px;
-        color: #cdd6f4;
-      }
-      .ai-hooks-btn {
-        width: 100%;
-        padding: 10px 16px;
-        border-radius: 8px;
-        font-size: 13px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.15s;
-        border: 1px solid #45475a;
-        background: #313244;
-        color: #cdd6f4;
-        font-family: inherit;
-      }
-      .ai-hooks-btn.install {
-        background: linear-gradient(135deg, #4fc3f7, #7c4dff);
-        color: #fff;
-        border: none;
-        font-weight: 600;
-      }
-      .ai-hooks-btn.uninstall {
-        border-color: #f38ba8;
-        color: #f38ba8;
-      }
-    </style>
-    <title>AI 设置</title>
-  </head>
-  <body>
-    <div class="ai-settings-panel">
-      <div class="ai-settings-header">
-        <span class="ai-settings-icon">🤖</span>
-        <div>
-          <div class="ai-settings-title">AI 对话设置</div>
-          <div class="ai-settings-subtitle">DeepSeek</div>
-        </div>
-        <span id="ai-settings-status-dot" class="ai-status-dot"></span>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>设置</title>
+<style>
+  :root {
+    --base: #1e1e2e; --mantle: #181825; --crust: #11111b;
+    --surface0: #313244; --surface1: #45475a; --surface2: #585b70;
+    --overlay0: #6c7086; --overlay1: #7f849c;
+    --subtext0: #a6adc8; --subtext1: #bac2de;
+    --text: #cdd6f4;
+    --blue: #89b4fa; --green: #a6e3a1; --peach: #fab387;
+    --red: #f38ba8; --mauve: #cba6f7; --pink: #f5c2e7;
+    --radius-sm: 8px; --radius: 12px; --radius-lg: 16px;
+    --font: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    --font-mono: 'SF Mono', Monaco, monospace;
+    --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--base); overflow: hidden;
+    font-family: var(--font); color: var(--text);
+    user-select: none;
+  }
+  .window {
+    width: 100%; height: 100%; display: flex; flex-direction: column;
+  }
+  .titlebar {
+    height: 36px; display: flex; align-items: center;
+    padding: 0 12px; background: var(--mantle); flex-shrink: 0;
+    border-bottom: 1px solid rgba(69,71,90,0.2);
+  }
+  .titlebar-text {
+    flex: 1; text-align: center;
+    font-size: 12px; font-weight: 600; color: var(--subtext0);
+    letter-spacing: -0.01em;
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex; gap: 0; flex-shrink: 0;
+    border-bottom: 1px solid rgba(69,71,90,0.2);
+    background: var(--mantle); padding: 0 12px;
+  }
+  .tab {
+    padding: 9px 14px; font-size: 11.5px; font-weight: 500;
+    cursor: pointer; color: var(--overlay1);
+    border-bottom: 2px solid transparent;
+    transition: all var(--transition);
+  }
+  .tab:hover { color: var(--subtext1); }
+  .tab.active { color: var(--mauve); border-bottom-color: var(--mauve); font-weight: 600; }
+  .tab .badge {
+    display: inline-block; width: 6px; height: 6px;
+    border-radius: 50%; background: var(--green);
+    margin-left: 4px; vertical-align: middle;
+  }
+
+  /* Content */
+  .content { flex: 1; overflow-y: auto; padding: 16px 20px; }
+  .content::-webkit-scrollbar { width: 4px; }
+  .content::-webkit-scrollbar-thumb { background: var(--surface1); border-radius: 2px; }
+  .panel { display: none; animation: fadeIn 0.2s ease-out; }
+  .panel.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+  .field { margin-bottom: 12px; }
+  .field label {
+    display: block; font-size: 10px; font-weight: 600;
+    color: var(--subtext0); margin-bottom: 4px;
+    letter-spacing: 0.03em;
+  }
+  .field input, .field textarea, .field select {
+    width: 100%; padding: 8px 11px;
+    background: var(--surface0);
+    border: 1px solid var(--surface1);
+    border-radius: var(--radius-sm);
+    color: var(--text); font-size: 12px;
+    font-family: var(--font); outline: none;
+    transition: border-color var(--transition), box-shadow var(--transition);
+  }
+  .field input:focus, .field textarea:focus, .field select:focus {
+    border-color: var(--mauve);
+    box-shadow: 0 0 0 3px rgba(203,166,247,0.08);
+  }
+  .field textarea { resize: vertical; min-height: 60px; font-family: var(--font-mono); font-size: 11px; line-height: 1.5; }
+  .field select {
+    cursor: pointer; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23a6adc8' fill='none' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center;
+    padding-right: 26px;
+  }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .field-hint { font-size: 10px; color: var(--overlay0); margin-top: 3px; }
+  .field-hint .reset-link { color: var(--mauve); cursor: pointer; }
+
+  .btn {
+    padding: 8px 16px; border-radius: var(--radius-sm);
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    border: none; font-family: var(--font);
+    letter-spacing: 0.01em; transition: all var(--transition);
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .btn-primary { background: linear-gradient(135deg, var(--mauve), #b392f0); color: var(--crust); }
+  .btn-primary:hover { box-shadow: 0 4px 12px rgba(203,166,247,0.3); }
+  .btn-secondary { background: var(--surface0); border: 1px solid var(--surface1); color: var(--text); }
+  .btn-secondary:hover { background: var(--surface1); }
+  .btn-danger { background: transparent; border: 1px solid rgba(243,139,168,0.3); color: var(--red); }
+  .btn-danger:hover { background: rgba(243,139,168,0.08); }
+  .btn-sm { padding: 4px 10px; font-size: 10px; border-radius: 5px; }
+  .btn-row { display: flex; gap: 8px; margin-top: 16px; }
+  .btn-row-end { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+
+  /* Toggle */
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; }
+  .toggle-row .info { font-size: 12px; }
+  .toggle-row .info sub { display: block; font-size: 10px; color: var(--overlay1); margin-top: 1px; }
+  .toggle {
+    width: 42px; height: 24px; border-radius: 12px;
+    background: var(--surface2); cursor: pointer;
+    position: relative; transition: background var(--transition); flex-shrink: 0;
+  }
+  .toggle.on { background: var(--green); }
+  .toggle::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    transition: transform var(--transition);
+  }
+  .toggle.on::after { transform: translateX(18px); }
+
+  /* Key Cards */
+  .key-card {
+    background: var(--surface0); border: 1px solid var(--surface1);
+    border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px;
+    transition: all var(--transition);
+  }
+  .key-card.default { border-color: rgba(203,166,247,0.3); background: rgba(203,166,247,0.03); }
+  .key-card-header {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  }
+  .key-card-header .name { font-weight: 600; font-size: 12px; }
+  .default-badge {
+    font-size: 9px; font-weight: 600; color: var(--mauve);
+    background: rgba(203,166,247,0.12); padding: 2px 8px; border-radius: 10px;
+  }
+  .key-card-actions { margin-left: auto; display: flex; gap: 4px; }
+
+  .add-key-btn {
+    width: 100%; padding: 9px; background: transparent;
+    border: 1.5px dashed rgba(203,166,247,0.2);
+    border-radius: var(--radius); color: var(--mauve);
+    font-size: 12px; cursor: pointer; font-family: var(--font);
+    font-weight: 500; transition: all var(--transition);
+    margin-bottom: 8px;
+  }
+  .add-key-btn:hover { background: rgba(203,166,247,0.04); border-color: var(--mauve); }
+
+  /* Combo Box */
+  .combo { position: relative; }
+  .combo input { width: 100%; padding-right: 24px; cursor: text; }
+  .combo-arrow {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    font-size: 7px; color: var(--overlay0); pointer-events: none;
+  }
+  .combo-dropdown {
+    position: absolute; top: 100%; left: 0; right: 0;
+    background: var(--surface0); border: 1px solid var(--surface1);
+    border-radius: var(--radius-sm); margin-top: 3px; z-index: 10;
+    display: none; overflow: hidden;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+  }
+  .combo.open .combo-dropdown { display: block; }
+  .combo-option {
+    padding: 7px 10px; font-size: 11.5px;
+    cursor: pointer; color: var(--subtext0);
+    transition: background var(--transition);
+  }
+  .combo-option:hover { background: rgba(203,166,247,0.1); color: var(--text); }
+
+  /* Status */
+  .status-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; border-radius: var(--radius-sm);
+    background: var(--surface0); margin-bottom: 10px; font-size: 12px;
+  }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--surface2); flex-shrink: 0;
+  }
+  .status-dot.on { background: var(--green); box-shadow: 0 0 8px rgba(166,227,161,0.3); }
+
+  /* Pet select */
+  .pet-select-list { display: flex; flex-direction: column; gap: 5px; max-height: 110px; overflow-y: auto; }
+  .pet-select-card {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border-radius: var(--radius-sm);
+    background: var(--surface0); cursor: pointer;
+    border: 1.5px solid transparent; transition: all var(--transition);
+  }
+  .pet-select-card:hover { background: var(--surface1); }
+  .pet-select-card.selected { border-color: var(--mauve); background: rgba(203,166,247,0.04); }
+  .pet-select-card .emoji { font-size: 18px; }
+  .pet-select-card .name { font-size: 12px; font-weight: 600; }
+  .pet-select-card .detail { font-size: 10px; color: var(--overlay1); margin-left: auto; }
+  .check-circle {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid var(--surface2); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; transition: all var(--transition);
+  }
+  .pet-select-card.selected .check-circle { border-color: var(--mauve); background: var(--mauve); color: var(--crust); }
+
+  /* Import Tabs */
+  .import-tabs {
+    display: flex; gap: 0;
+    background: var(--surface0); border-radius: var(--radius-sm);
+    padding: 3px; margin-bottom: 14px;
+  }
+  .import-tab {
+    flex: 1; padding: 7px; text-align: center;
+    font-size: 11px; cursor: pointer; border-radius: 5px;
+    color: var(--overlay1); font-weight: 500;
+    transition: all var(--transition);
+  }
+  .import-tab.active { background: var(--mauve); color: var(--crust); font-weight: 600; }
+
+  /* Status bar */
+  .status-bar {
+    margin-top: 14px; padding: 8px 12px; border-radius: 6px;
+    font-size: 11px; text-align: center; display: none;
+  }
+  .status-bar.show { display: block; }
+  .status-bar.ok { background: rgba(166,227,161,0.1); border: 1px solid rgba(166,227,161,0.2); color: var(--green); }
+  .status-bar.err { background: rgba(243,139,168,0.1); border: 1px solid rgba(243,139,168,0.2); color: var(--red); }
+
+  .divider { height: 1px; background: rgba(69,71,90,0.2); margin: 14px 0; }
+  .section-label { font-size: 10px; font-weight: 600; color: var(--overlay1); margin-bottom: 10px; letter-spacing: 0.03em; }
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="titlebar"><div class="titlebar-text">设置</div></div>
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-tab="ai">🤖 AI 设置</div>
+    <div class="tab" data-tab="persona">✨ 宠物人设</div>
+    <div class="tab" data-tab="import">➕ 添加宠物</div>
+    <div class="tab" data-tab="hooks">🪝 CC Hooks<span class="badge" id="hooks-badge"></span></div>
+  </div>
+  <div class="content" id="content">
+
+    <!-- ===== AI Settings ===== -->
+    <div class="panel active" id="panel-ai">
+      <div class="section-label">API Keys</div>
+      <div id="key-cards"></div>
+      <button class="add-key-btn" id="add-key-btn">+ 添加 API Key</button>
+
+      <div class="divider"></div>
+
+      <div class="toggle-row">
+        <div class="info">空闲时主动说话<sub>发呆久了偶尔冒一句话</sub></div>
+        <div class="toggle on" id="idle-toggle"></div>
       </div>
-      <div class="ai-settings-field">
-        <label>API Key</label>
-        <div class="ai-input-wrap">
-          <input id="ai-key-input" type="password" placeholder="sk-..." />
-          <span id="ai-key-toggle" class="ai-eye">👁</span>
-        </div>
-      </div>
-      <div class="ai-settings-row">
-        <div class="ai-settings-field">
-          <label>Base URL</label>
-          <input id="ai-url-input" value="https://api.deepseek.com" />
-        </div>
-        <div class="ai-settings-field">
-          <label>模型</label>
-          <input id="ai-model-input" type="text" placeholder="DeepSeek-V3" />
+      <div class="field">
+        <label>说话间隔</label>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input type="number" id="idle-interval" value="300" min="60" max="3600" style="width:80px;text-align:center;" />
+          <span style="font-size:12px;color:var(--overlay1);">秒</span>
         </div>
       </div>
-      <div class="ai-settings-field">
-        <label>人设 Prompt</label>
-        <textarea id="ai-prompt-input" rows="3">你是一只可爱的桌面宠物猫，名叫小橘。你是主人的编程伙伴，用简短可爱的语气回应，每句话不超过30字。偶尔加个喵~</textarea>
-        <div class="ai-field-meta">
-          <span id="ai-prompt-count">0 / 500</span>
-          <span id="ai-prompt-reset">重置默认</span>
-        </div>
+
+      <div class="btn-row-end">
+        <button class="btn btn-secondary" id="test-all-btn">测试全部连接</button>
+        <button class="btn btn-primary" id="save-ai-btn">保存设置</button>
       </div>
-      <div class="ai-settings-divider"></div>
-      <div class="ai-settings-field">
-        <div class="ai-toggle-row">
-          <div>
-            <label>空闲时主动说话</label>
-            <span class="ai-field-hint">发呆久了偶尔冒一句话</span>
-          </div>
-          <div id="ai-idle-toggle" class="ai-toggle on"></div>
-        </div>
-      </div>
-      <div id="ai-interval-row" class="ai-settings-field">
-        <label>间隔时间</label>
-        <div class="ai-interval-wrap">
-          <input id="ai-interval-input" type="number" value="300" min="60" max="3600" />
-          <span class="ai-interval-unit">秒</span>
-        </div>
-      </div>
-      <div class="ai-settings-divider"></div>
-      <div class="ai-settings-field">
-        <label>Claude Code Hooks</label>
-        <div class="ai-hooks-status" id="ai-hooks-status">
-          <span id="ai-hooks-dot" class="ai-status-dot"></span>
-          <span id="ai-hooks-text">检查中...</span>
-        </div>
-        <div style="margin-top: 8px;">
-          <button id="ai-hooks-btn" class="ai-hooks-btn" disabled>检查中...</button>
-        </div>
-      </div>
-      <div class="ai-settings-actions">
-        <button id="ai-test-btn">测试连接</button>
-        <button id="ai-save-btn" class="primary">保存设置</button>
-      </div>
-      <div id="ai-status-bar" class="ai-status-bar"></div>
+      <div class="status-bar" id="ai-status-bar"></div>
     </div>
-    <script type="module" src="/src/ai-settings-main.ts"></script>
-  </body>
+
+    <!-- ===== Persona ===== -->
+    <div class="panel" id="panel-persona">
+      <div class="field">
+        <label>选择宠物</label>
+        <div class="pet-select-list" id="persona-pet-list"></div>
+      </div>
+      <div class="field">
+        <label>使用 API Key</label>
+        <select id="persona-key-select"></select>
+        <div class="field-hint">选择此宠物使用的 AI 服务</div>
+      </div>
+      <div class="field">
+        <label>模型（可选）</label>
+        <div class="combo" id="persona-model-combo">
+          <input placeholder="留空则使用默认模型" id="persona-model" />
+          <span class="combo-arrow">▼</span>
+          <div class="combo-dropdown" id="persona-model-dropdown"></div>
+        </div>
+        <div class="field-hint">可选，留空则使用所选 Key 的默认模型</div>
+      </div>
+      <div class="field">
+        <label>人设 Prompt</label>
+        <textarea id="persona-prompt" rows="4"></textarea>
+        <div class="field-hint" style="display:flex;justify-content:space-between;">
+          <span id="persona-count">0 / 500</span>
+          <span class="reset-link" id="persona-reset">重置默认</span>
+        </div>
+      </div>
+      <div class="btn-row-end">
+        <button class="btn btn-primary" id="save-persona-btn">保存人设</button>
+      </div>
+      <div class="status-bar" id="persona-status-bar"></div>
+    </div>
+
+    <!-- ===== Import ===== -->
+    <div class="panel" id="panel-import">
+      <div class="import-tabs" id="import-tabs">
+        <div class="import-tab active" data-import-mode="dir">📁 Petdex 目录导入</div>
+        <div class="import-tab" data-import-mode="file">🖼️ 精灵图上传</div>
+      </div>
+      <div id="import-dir">
+        <div class="field">
+          <label>选择 Petdex 宠物目录</label>
+          <input id="import-dir-path" readonly style="cursor:pointer;" />
+          <div class="field-hint">目录需包含 pet.json 和 spritesheet.webp</div>
+        </div>
+        <div id="import-dir-preview" style="display:none;">
+          <div class="status-row">
+            <span id="import-dir-emoji">📋</span>
+            <div>
+              <div style="font-weight:600;" id="import-dir-name"></div>
+              <div style="font-size:10px;color:var(--overlay1);" id="import-dir-info"></div>
+            </div>
+            <span style="margin-left:auto;font-size:10px;color:var(--green);" id="import-dir-status"></span>
+          </div>
+        </div>
+        <button class="btn btn-primary" style="width:100%;" id="import-dir-confirm">确认导入</button>
+        <div class="status-bar" id="import-status-bar"></div>
+      </div>
+      <div id="import-file" style="display:none;">
+        <div class="field">
+          <label>宠物名称</label>
+          <input id="import-file-name" placeholder="输入宠物名称" />
+        </div>
+        <div class="field">
+          <label>选择精灵图</label>
+          <input id="import-file-path" readonly style="cursor:pointer;" />
+          <div class="field-hint">8列网格，192×208px 单元，宽度 1536px</div>
+        </div>
+        <button class="btn btn-primary" style="width:100%;" id="import-file-confirm">确认添加</button>
+        <div class="status-bar" id="import-file-status-bar"></div>
+      </div>
+    </div>
+
+    <!-- ===== CC Hooks ===== -->
+    <div class="panel" id="panel-hooks">
+      <div class="status-row" id="hooks-status-row">
+        <span class="status-dot" id="hooks-dot"></span>
+        <div>
+          <div style="font-weight:600;" id="hooks-status-text">检查中...</div>
+          <div style="font-size:10px;color:var(--overlay1);">路径: ~/.claude/hooks/desktop-pet/notify.sh</div>
+        </div>
+      </div>
+      <p style="font-size:11px;color:var(--overlay1);line-height:1.6;margin-bottom:14px;">
+        安装后，宠物会在以下 Claude Code 事件时展示反应：
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-size:10.5px;margin-bottom:16px;">
+        <thead>
+          <tr style="color:var(--subtext0);text-align:left;">
+            <th style="padding:3px 6px;">Hook 事件</th>
+            <th style="padding:3px 6px;">动画</th>
+            <th style="padding:3px 6px;">气泡</th>
+          </tr>
+        </thead>
+        <tbody style="color:var(--overlay1);">
+          <tr><td style="padding:2px 6px;">UserPromptSubmit</td><td style="padding:2px 6px;">review</td><td style="padding:2px 6px;">Thinking...</td></tr>
+          <tr><td style="padding:2px 6px;">PostToolUse</td><td style="padding:2px 6px;">running</td><td style="padding:2px 6px;">Running...</td></tr>
+          <tr><td style="padding:2px 6px;">PermissionRequest</td><td style="padding:2px 6px;">waiting</td><td style="padding:2px 6px;">Waiting...</td></tr>
+          <tr><td style="padding:2px 6px;">PostCompact</td><td style="padding:2px 6px;">failed</td><td style="padding:2px 6px;">Compacted</td></tr>
+          <tr><td style="padding:2px 6px;">SessionEnd</td><td style="padding:2px 6px;">waving</td><td style="padding:2px 6px;">Done!</td></tr>
+        </tbody>
+      </table>
+      <button class="btn btn-danger" id="hooks-btn" style="width:100%;">--</button>
+      <div class="status-bar" id="hooks-status-msg"></div>
+    </div>
+  </div>
+</div>
+<script type="module" src="/src/ai-settings-main.ts"></script>
+</body>
 </html>

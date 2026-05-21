@@ -24,7 +24,7 @@ describe('NativeAppMenu', () => {
     }));
   });
 
-  it('builds a Chinese native app menu', async () => {
+  it('builds a Chinese native app menu with 桌面宠物, 编辑, 设置', async () => {
     const menu = new NativeAppMenu();
 
     await menu.setPets(
@@ -36,24 +36,28 @@ describe('NativeAppMenu', () => {
     );
 
     expect(menuNew).toHaveBeenCalledTimes(1);
-    const options = menuNew.mock.calls[0]?.[0] as { items: Array<{ text: string; items?: Array<{ text?: string; enabled?: boolean }> }> };
-    expect(options.items.map((item) => item.text)).toEqual(['桌面宠物', '编辑', '动作', '切换宠物', '管理']);
-    expect(options.items[2]?.items?.map((item) => item.text)).toEqual(STATE_ITEMS.map((item) => item.label));
-    expect(options.items[3]?.items).toEqual(
+    const options = menuNew.mock.calls[0]?.[0] as {
+      items: Array<{ text: string; items?: Array<{ text?: string; enabled?: boolean }> }>;
+    };
+
+    // Top-level menus
+    expect(options.items.map((item) => item.text)).toEqual(['桌面宠物', '编辑', '设置']);
+
+    // 桌面宠物 submenu includes state items and pet list
+    const desktopPetItems = options.items[0]?.items ?? [];
+    expect(desktopPetItems).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ text: '当前：小猫', enabled: false }),
+        expect.objectContaining({ text: '当前宠物：小猫', enabled: false }),
         expect.objectContaining({ text: '狐狸', enabled: true }),
       ]),
     );
-    expect(options.items[4]?.items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ text: '添加宠物...', enabled: true }),
-      ]),
-    );
-    expect(setAsAppMenu).toHaveBeenCalledTimes(1);
+    // State items are in the desktop pet submenu
+    for (const stateItem of STATE_ITEMS) {
+      expect(desktopPetItems.some((item) => 'text' in item && item.text === stateItem.label)).toBe(true);
+    }
   });
 
-  it('includes remove pet menu item for removable current pet', async () => {
+  it('includes remove pet menu item for removable current pet in 设置 menu', async () => {
     const menu = new NativeAppMenu();
 
     await menu.setPets(
@@ -67,16 +71,16 @@ describe('NativeAppMenu', () => {
     const options = menuNew.mock.calls[0]?.[0] as {
       items: Array<{ text: string; items?: Array<{ text?: string; id?: string }> }>;
     };
-    const manageItems = options.items[4]?.items ?? [];
-    expect(manageItems).toEqual(
+    const settingsItems = options.items[2]?.items ?? [];
+    expect(settingsItems).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ text: '添加宠物...' }),
-        expect.objectContaining({ text: '移除 "狐狸"' }),
+        expect.objectContaining({ text: '移除 "狐狸"...' }),
       ]),
     );
   });
 
-  it('emits addPet action from menu', async () => {
+  it('emits addPet action from 设置 menu', async () => {
     const menu = new NativeAppMenu();
     const handler = vi.fn();
     menu.on(handler);
@@ -89,8 +93,8 @@ describe('NativeAppMenu', () => {
     const options = menuNew.mock.calls[0]?.[0] as {
       items: Array<{ items?: Array<{ id?: string; action?: () => void }> }>;
     };
-    const manageItems = options.items[4]?.items ?? [];
-    manageItems.find((item) => item.id === 'add-pet')?.action?.();
+    const settingsItems = options.items[2]?.items ?? [];
+    settingsItems.find((item) => item.id === 'add-pet')?.action?.();
 
     expect(handler).toHaveBeenCalledWith({ type: 'addPet' });
   });

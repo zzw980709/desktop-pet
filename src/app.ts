@@ -12,7 +12,7 @@ import type { MenuAction } from './ui/menu-model';
 import { CELL_HEIGHT, CELL_WIDTH } from './pets/contract';
 import { discoverPets } from './pets/catalog';
 import type { PetCatalogEntry, PetState, Preferences } from './types';
-import { setConfig, getConfig } from './ai/chat';
+import { setConfig, getConfig, isConfigValid } from './ai/chat';
 
 const DRAG_ANIMATED_STATES = new Set(['running-right', 'running-left']);
 const EDGE_DETECT_MARGIN = 40;
@@ -328,9 +328,9 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
     animator.play(config.state);
 
     // Try AI reaction first, fallback to static text
-    if (getConfig()) {
+    if (isConfigValid()) {
       try {
-        const reaction = await invoke<string>('generate_event_reaction', { event: eventName });
+        const reaction = await invoke<string>('generate_event_reaction', { event: eventName, petId: activePet.id });
         showBubble({ ...config, bubbleText: reaction });
         return;
       } catch {
@@ -387,6 +387,7 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
         }
         break;
       case 'aiSettings':
+      case 'openSettings':
         void invoke('open_ai_settings_window');
         break;
     }
@@ -434,7 +435,7 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
   // Click-to-chat: when AI configured, click pet to chat
   let chatClickTimer = 0;
   canvas.addEventListener('click', () => {
-    if (!getConfig()) return;
+    if (!isConfigValid()) return;
     if (behavior.isDragging || behavior.recentlyDragged) return;
     const now = performance.now();
     if (now - chatClickTimer < 300) return;

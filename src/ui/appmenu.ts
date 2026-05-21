@@ -13,10 +13,7 @@ export class NativeAppMenu {
   }
 
   async setPets(pets: PetMenuItem[], currentPetId: string): Promise<void> {
-    if (!this.isAvailable()) {
-      return;
-    }
-
+    if (!this.isAvailable()) return;
     this.pets = pets;
     this.currentPetId = currentPetId;
 
@@ -41,19 +38,9 @@ export class NativeAppMenu {
           ],
         } satisfies SubmenuOptions,
         {
-          id: 'actions',
-          text: '动作',
-          items: this.buildStateItems(),
-        } satisfies SubmenuOptions,
-        {
-          id: 'switch-pet',
-          text: '切换宠物',
-          items: this.buildPetItems(),
-        } satisfies SubmenuOptions,
-        {
-          id: 'manage',
-          text: '管理',
-          items: this.buildManageItems(),
+          id: 'settings',
+          text: '设置',
+          items: this.buildSettingsItems(),
         } satisfies SubmenuOptions,
       ],
     } satisfies MenuOptions);
@@ -67,6 +54,8 @@ export class NativeAppMenu {
 
   private buildDesktopPetItems(): Array<MenuItemOptions | PredefinedMenuItemOptions> {
     const items: Array<MenuItemOptions | PredefinedMenuItemOptions> = [];
+
+    // Current pet info
     if (this.currentPetId) {
       items.push({
         id: `current:${this.currentPetId}`,
@@ -75,49 +64,58 @@ export class NativeAppMenu {
       });
     }
     items.push({ item: 'Separator' });
-    items.push(...this.buildStateItems());
+
+    // State actions
+    for (const item of STATE_ITEMS) {
+      items.push({
+        id: `state:${item.action}`,
+        text: item.label,
+        action: () => this.emit({ type: 'state', state: item.action }),
+      });
+    }
+
+    items.push({ item: 'Separator' });
+
+    // Switch pet submenu
+    if (this.pets.length === 0) {
+      items.push({ id: 'pet:none', text: '无可用宠物', enabled: false });
+    } else {
+      for (const pet of this.pets) {
+        if (pet.id === this.currentPetId) {
+          items.push({
+            id: `pet:${pet.id}`,
+            text: `● ${pet.label}`,
+            enabled: false,
+          });
+        } else {
+          items.push({
+            id: `pet:${pet.id}`,
+            text: pet.label,
+            enabled: true,
+            action: () => this.emit({ type: 'pet', petId: pet.id }),
+          });
+        }
+      }
+    }
+
     return items;
   }
 
-  private buildStateItems(): MenuItemOptions[] {
-    return STATE_ITEMS.map((item) => ({
-      id: `state:${item.action}`,
-      text: item.label,
-      action: () => this.emit({ type: 'state', state: item.action }),
-    }));
-  }
-
-  private buildPetItems(): MenuItemOptions[] {
-    if (this.pets.length === 0) {
-      return [
-        {
-          id: 'pet:none',
-          text: '无可用宠物',
-          enabled: false,
-        },
-      ];
-    }
-
-    return this.pets.map((pet): MenuItemOptions => {
-      if (pet.id === this.currentPetId) {
-        return {
-          id: `pet:${pet.id}`,
-          text: `当前：${pet.label}`,
-          enabled: false,
-        };
-      }
-
-      return {
-        id: `pet:${pet.id}`,
-        text: pet.label,
-        enabled: true,
-        action: () => this.emit({ type: 'pet', petId: pet.id }),
-      };
-    });
-  }
-
-  private buildManageItems(): Array<MenuItemOptions | PredefinedMenuItemOptions> {
+  private buildSettingsItems(): Array<MenuItemOptions | PredefinedMenuItemOptions> {
     const items: Array<MenuItemOptions | PredefinedMenuItemOptions> = [
+      {
+        id: 'ai-settings',
+        text: 'AI 设置...',
+        enabled: true,
+        action: () => this.emit({ type: 'openSettings', tab: 'ai' }),
+      },
+      {
+        id: 'persona-settings',
+        text: '宠物人设...',
+        enabled: true,
+        action: () => this.emit({ type: 'openSettings', tab: 'persona' }),
+      },
+      { item: 'Separator' },
       {
         id: 'add-pet',
         text: '添加宠物...',
@@ -126,19 +124,20 @@ export class NativeAppMenu {
       },
       { item: 'Separator' },
       {
-        id: 'ai-settings',
-        text: 'AI 设置...',
+        id: 'hooks-settings',
+        text: 'CC Hooks...',
         enabled: true,
-        action: () => this.emit({ type: 'aiSettings' }),
+        action: () => this.emit({ type: 'openSettings', tab: 'hooks' }),
       },
     ];
 
+    // Remove current pet
     const currentPet = this.pets.find((p) => p.id === this.currentPetId);
     if (currentPet && currentPet.removable) {
       items.push({ item: 'Separator' });
       items.push({
         id: 'remove-pet',
-        text: `移除 "${currentPet.label}"`,
+        text: `移除 "${currentPet.label}"...`,
         enabled: true,
         action: () => this.emit({ type: 'removePet', petId: currentPet.id }),
       });

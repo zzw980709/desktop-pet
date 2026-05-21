@@ -38,11 +38,24 @@ export interface Position {
   y: number;
 }
 
-export interface AiConfig {
+export interface ApiKeyEntry {
+  id?: number;
+  provider: string;
   apiKey: string;
   baseUrl: string;
-  model: string;
+  defaultModel: string;
+  isDefault: boolean;
+}
+
+export interface PetPersona {
+  petId: string;
+  apiKeyId: number | null;
+  modelOverride: string;
   systemPrompt: string;
+}
+
+export interface AiConfig {
+  apiKeys: ApiKeyEntry[];
   idleChatEnabled: boolean;
   idleChatInterval: number;
 }
