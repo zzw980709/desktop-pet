@@ -31,18 +31,19 @@ const PET_ANIMATIONS: Record<PetState, AnimationSpec> = {
   review: { row: 8, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [400, 280, 450, 280, 220, 400], loop: true },
 };
 
-// Petdex format: 9 columns per row, 8 rows. Maps petdex rows to desktop-pet states.
-// petdex rows: 0=idle, 1=wave, 2=run, 3=failed, 4=review, 5=jump, 6=extra1, 7=extra2
+// Petdex gallery format: 8 columns, 8+ rows.
+// Row mapping: 0=idle, 1=wave, 2=run, 3=failed, 4=review, 5=jump, 6=extra1, 7=extra2
+// Frame counts per row vary (4-8), matching actual petdex spritesheet content.
 const PETDEX_ANIMATIONS: Record<PetState, AnimationSpec> = {
-  idle: { row: 0, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [500, 220, 280, 220, 280, 220, 280, 500], loop: true },
+  idle: { row: 0, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [400, 220, 280, 220, 280, 400], loop: true },
   'running-right': { row: 2, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [180, 160, 180, 160, 180, 160, 180, 300], loop: true },
   'running-left': { row: 2, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [180, 160, 180, 160, 180, 160, 180, 300], loop: true, flipHorizontal: true },
-  waving: { row: 1, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [250, 180, 200, 180, 200, 180, 200, 250], loop: false },
-  jumping: { row: 5, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [240, 160, 450, 180, 200, 200, 200, 280], loop: false },
-  failed: { row: 3, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [180, 160, 160, 200, 220, 280, 350, 600], loop: false },
-  waiting: { row: 6, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [350, 220, 220, 220, 220, 350, 220, 400], loop: true },
-  running: { row: 2, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [140, 120, 140, 120, 140, 120, 140, 260], loop: true },
-  review: { row: 4, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [400, 280, 450, 280, 220, 280, 220, 400], loop: true },
+  waving: { row: 1, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [200, 160, 180, 160, 180, 160, 180, 240], loop: false },
+  jumping: { row: 5, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [200, 140, 350, 160, 180, 180, 180, 260], loop: false },
+  failed: { row: 3, usedColumns: [0, 1, 2, 3], durationsMs: [200, 180, 220, 400], loop: false },
+  waiting: { row: 6, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [350, 220, 220, 220, 220, 400], loop: true },
+  running: { row: 2, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [140, 120, 140, 120, 140, 120, 140, 240], loop: true },
+  review: { row: 4, usedColumns: [0, 1, 2, 3, 4], durationsMs: [400, 280, 450, 280, 400], loop: true },
 };
 
 type TransitionState = {
