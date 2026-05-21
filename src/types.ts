@@ -9,16 +9,20 @@ export type PetState =
   | 'running'
   | 'review';
 
+export type AtlasFormat = 'desktop-pet' | 'petdex';
+
 export interface PetManifest {
   id: string;
   displayName: string;
   description: string;
   spritesheetPath: 'spritesheet.webp';
+  atlasFormat?: AtlasFormat;
 }
 
 export interface LoadedPet {
   manifest: PetManifest;
   spritesheet: HTMLImageElement;
+  atlasFormat: AtlasFormat;
 }
 
 export interface PetCatalogEntry {

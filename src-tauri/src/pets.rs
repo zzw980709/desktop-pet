@@ -47,7 +47,9 @@ pub fn read_webp_dimensions(data: &[u8]) -> Option<(u32, u32)> {
 }
 
 pub const EXPECTED_SPRITESHEET_W: u32 = 1536;
+pub const EXPECTED_SPRITESHEET_W_PETDEX: u32 = 1728;
 pub const EXPECTED_SPRITESHEET_MIN_H: u32 = 1872;
+pub const EXPECTED_SPRITESHEET_MIN_H_PETDEX: u32 = 1664;
 pub const CELL_H: u32 = 208;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

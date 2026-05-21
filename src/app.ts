@@ -86,7 +86,7 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
   }
 
   const behavior = new BehaviorEngine();
-  const animator = new Animator();
+  let animator = new Animator();
   const nativeMenu = new NativeAppMenu();
   const renderScale = getRenderScale(canvas);
   let renderer = new Renderer(canvas, renderScale);
@@ -136,6 +136,7 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
     pets = availablePets;
     renderer = new Renderer(canvas, renderScale);
     renderer.setCharacter(loadedPet);
+    animator = new Animator(loadedPet.atlasFormat);
     syncMenuPets(pets, activePet.id);
     animator.play(behavior.currentState);
 
@@ -523,7 +524,7 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
         animator.tick(deltaMs);
       }
 
-      renderer.drawFrame(animator.currentCell);
+      renderer.drawFrame(animator.currentCell, animator.flipHorizontal);
 
       if (heartAlpha > 0) {
         heartTimer -= deltaMs;

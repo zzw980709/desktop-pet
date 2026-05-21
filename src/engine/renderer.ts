@@ -35,7 +35,7 @@ export class Renderer {
     this.pet = pet;
   }
 
-  drawFrame(cell: FrameCell): void {
+  drawFrame(cell: FrameCell, flipHorizontal = false): void {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
     if (!this.pet) return;
@@ -45,7 +45,13 @@ export class Renderer {
 
       this.offCtx.clearRect(0, 0, this.offscreen.width, this.offscreen.height);
       this.offCtx.drawImage(this.pet.spritesheet, sx, sy, sw, sh, 0, 0, sw, sh);
+      this.ctx.save();
+      if (flipHorizontal) {
+        this.ctx.translate(this.canvas.width, 0);
+        this.ctx.scale(-1, 1);
+      }
       this.ctx.drawImage(this.offscreen, 0, 0, this.frameWidth, this.frameHeight, 0, 0, this.canvas.width, this.canvas.height);
+      this.ctx.restore();
     } catch (err) {
       // Rate-limit frame errors to 1 per second
       const now = performance.now();

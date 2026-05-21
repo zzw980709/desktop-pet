@@ -1,4 +1,4 @@
-import type { PetState } from '../types';
+import type { AtlasFormat, PetState } from '../types';
 
 type EventHandler = () => void;
 
@@ -7,6 +7,8 @@ type AnimationSpec = {
   usedColumns: number[];
   durationsMs: number[];
   loop: boolean;
+  /** Renderer should flip this animation horizontally */
+  flipHorizontal?: boolean;
 };
 
 const PET_ANIMATIONS: Record<PetState, AnimationSpec> = {
@@ -29,6 +31,20 @@ const PET_ANIMATIONS: Record<PetState, AnimationSpec> = {
   review: { row: 8, usedColumns: [0, 1, 2, 3, 4, 5], durationsMs: [400, 280, 450, 280, 220, 400], loop: true },
 };
 
+// Petdex format: 9 columns per row, 8 rows. Maps petdex rows to desktop-pet states.
+// petdex rows: 0=idle, 1=wave, 2=run, 3=failed, 4=review, 5=jump, 6=extra1, 7=extra2
+const PETDEX_ANIMATIONS: Record<PetState, AnimationSpec> = {
+  idle: { row: 0, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [500, 220, 280, 220, 280, 220, 280, 500], loop: true },
+  'running-right': { row: 2, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [180, 160, 180, 160, 180, 160, 180, 300], loop: true },
+  'running-left': { row: 2, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [180, 160, 180, 160, 180, 160, 180, 300], loop: true, flipHorizontal: true },
+  waving: { row: 1, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [250, 180, 200, 180, 200, 180, 200, 250], loop: false },
+  jumping: { row: 5, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [240, 160, 450, 180, 200, 200, 200, 280], loop: false },
+  failed: { row: 3, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [180, 160, 160, 200, 220, 280, 350, 600], loop: false },
+  waiting: { row: 6, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [350, 220, 220, 220, 220, 350, 220, 400], loop: true },
+  running: { row: 2, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [140, 120, 140, 120, 140, 120, 140, 260], loop: true },
+  review: { row: 4, usedColumns: [0, 1, 2, 3, 4, 5, 6, 7], durationsMs: [400, 280, 450, 280, 220, 280, 220, 400], loop: true },
+};
+
 type TransitionState = {
   frameIndex: number;
   elapsed: number;
@@ -38,6 +54,7 @@ export class Animator {
   currentState: PetState = 'idle';
   currentFrameIndex = 0;
   currentCell = { row: 0, column: 0 };
+  flipHorizontal = false;
   currentAnimation = this.currentState;
   currentFrame = 0;
 
@@ -45,8 +62,10 @@ export class Animator {
   private handlers: EventHandler[] = [];
   private finished = false;
   private paused = false;
+  private animations: Record<PetState, AnimationSpec>;
 
-  constructor(_manifest?: unknown) {
+  constructor(format: AtlasFormat = 'desktop-pet') {
+    this.animations = format === 'petdex' ? PETDEX_ANIMATIONS : PET_ANIMATIONS;
     this.syncCell();
   }
 
@@ -84,7 +103,7 @@ export class Animator {
   }
 
   tick(deltaMs: number): void {
-    const spec = PET_ANIMATIONS[this.currentState];
+    const spec = this.animations[this.currentState];
     if (!spec || this.finished || this.paused) return;
 
     this.elapsed += deltaMs;
@@ -111,19 +130,20 @@ export class Animator {
   }
 
   private syncCell(): void {
-    const spec = PET_ANIMATIONS[this.currentState];
+    const spec = this.animations[this.currentState];
     // Clamp frameIndex within valid range to guard against out-of-bounds access
     const maxIdx = spec.usedColumns.length - 1;
     const safeIdx = Math.max(0, Math.min(this.currentFrameIndex, maxIdx));
     this.currentFrameIndex = safeIdx;
     const column = spec.usedColumns[safeIdx] ?? spec.usedColumns[0] ?? 0;
     this.currentCell = { row: spec.row, column };
+    this.flipHorizontal = spec.flipHorizontal === true;
     this.currentFrame = spec.row * 8 + column;
   }
 
   private computeTransition(nextState: PetState): TransitionState {
-    const currentSpec = PET_ANIMATIONS[this.currentState];
-    const nextSpec = PET_ANIMATIONS[nextState];
+    const currentSpec = this.animations[this.currentState];
+    const nextSpec = this.animations[nextState];
 
     if (!currentSpec.loop || !nextSpec.loop) {
       return { frameIndex: 0, elapsed: 0 };
