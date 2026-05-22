@@ -89,7 +89,7 @@ cd src-tauri && cargo test    # Rust 测试
 |-------|------|--------|
 | API Key | AI 服务密钥（必填） | - |
 | Base URL | API 端点地址 | `https://api.deepseek.com` |
-| 模型 | 模型名称 | `DeepSeek-V3` |
+| 模型 | 模型名称 | `deepseek-v4-flash` |
 | 人设 Prompt | 宠物性格描述 | "你是一只可爱的桌面宠物猫…" |
 | 空闲说话 | 开启/关闭自动冒泡 | 开启 |
 | 说话间隔 | 空闲说话间隔（秒） | 300 |

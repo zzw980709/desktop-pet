@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { LogicalSize } from '@tauri-apps/api/dpi';
+import type { AiConfig, ApiKeyEntry } from './types';
 
 interface HistoryEntry { role: 'user' | 'assistant'; content: string; }
 
@@ -89,8 +90,8 @@ async function sendMessage(): Promise<void> {
   if (!msg || sending) return;
 
   try {
-    const config = await invoke<{ apiKey: string } | null>('get_ai_config');
-    if (!config || !config.apiKey) {
+    const config = await invoke<AiConfig | null>('get_ai_config');
+    if (!config || !config.apiKeys?.some((k: ApiKeyEntry) => k.apiKey.length > 0)) {
       emptyEl.style.display = '';
       emptyEl.innerHTML = '<div>⚠️ 请先在 AI 设置中配置 API Key</div><button class="chat-settings-btn" id="chat-open-settings">打开设置</button>';
       document.getElementById('chat-open-settings')?.addEventListener('click', () => {
