@@ -1,3 +1,5 @@
+import { listen } from '@tauri-apps/api/event';
+
 interface BubbleData {
   text: string;
   emoji: string;
@@ -20,11 +22,10 @@ function hideBubble(): void {
   wrap.classList.remove('show');
 }
 
-// Called from Rust via eval
-(window as unknown as Record<string, unknown>).bubbleUpdate = (data: BubbleData | null) => {
-  if (data) {
-    showBubble(data);
-  } else {
-    hideBubble();
-  }
-};
+void listen<BubbleData>('bubble-update', (event) => {
+  showBubble(event.payload);
+});
+
+void listen('bubble-hide', () => {
+  hideBubble();
+});

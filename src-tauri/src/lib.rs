@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use rusqlite::Connection;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 use tracing::{error, info, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -12,177 +12,12 @@ use std::collections::HashMap;
 mod pets;
 mod cc_hooks;
 mod ai;
+mod db;
 
-const BUILTIN_PET_ID: &str = "cat";
-const BUILTIN_MANIFEST: &str = include_str!("../resources/cat/pet.json");
-const BUILTIN_SPRITESHEET: &[u8] = include_bytes!("../resources/cat/spritesheet.webp");
+pub(crate) const BUILTIN_PET_ID: &str = "cat";
+pub(crate) const BUILTIN_MANIFEST: &str = include_str!("../resources/cat/pet.json");
+pub(crate) const BUILTIN_SPRITESHEET: &[u8] = include_bytes!("../resources/cat/spritesheet.webp");
 
-fn app_pets_dir(app_data: &PathBuf) -> PathBuf {
-    app_data.join("pets")
-}
-
-fn init_builtin_pet(app_data: &PathBuf) {
-    let pets_dir = app_pets_dir(app_data);
-    let cat_dir = pets_dir.join(BUILTIN_PET_ID);
-
-    if cat_dir.exists() {
-        info!("built-in pet 'cat' already exists, skipping");
-        return;
-    }
-
-    info!("initializing built-in pet 'cat'");
-    let _ = fs::create_dir_all(&cat_dir);
-    let _ = fs::write(cat_dir.join("pet.json"), BUILTIN_MANIFEST);
-    let _ = fs::write(cat_dir.join("spritesheet.webp"), BUILTIN_SPRITESHEET);
-}
-
-fn init_database(app_data: &PathBuf) -> Connection {
-    let db_path = app_data.join("desktop-pet.db");
-    let conn = Connection::open(&db_path).expect("failed to open database");
-
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS preferences (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            active_pet_id TEXT NOT NULL DEFAULT 'cat',
-            window_x INTEGER,
-            window_y INTEGER
-        );
-        INSERT OR IGNORE INTO preferences (id) VALUES (1);
-
-        CREATE TABLE IF NOT EXISTS ai_config (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            api_key TEXT NOT NULL DEFAULT '',
-            base_url TEXT NOT NULL DEFAULT 'https://api.deepseek.com',
-            model TEXT NOT NULL DEFAULT 'DeepSeek-V3',
-            system_prompt TEXT NOT NULL DEFAULT '你是一只可爱的桌面宠物猫，名叫小橘。你是主人的编程伙伴，用简短可爱的语气回应，每句话不超过30字。偶尔加个喵~',
-            idle_chat_enabled INTEGER NOT NULL DEFAULT 1,
-            idle_chat_interval INTEGER NOT NULL DEFAULT 300
-        );
-        INSERT OR IGNORE INTO ai_config (id) VALUES (1);
-
-        CREATE TABLE IF NOT EXISTS chat_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            pet_id TEXT NOT NULL DEFAULT 'cat',
-            role TEXT NOT NULL,
-            content TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-
-        CREATE TABLE IF NOT EXISTS api_keys (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            provider TEXT NOT NULL DEFAULT '',
-            api_key TEXT NOT NULL DEFAULT '',
-            base_url TEXT NOT NULL DEFAULT 'https://api.deepseek.com',
-            default_model TEXT NOT NULL DEFAULT '',
-            is_default INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-
-        CREATE TABLE IF NOT EXISTS pet_personas (
-            pet_id TEXT PRIMARY KEY,
-            api_key_id INTEGER,
-            model_override TEXT NOT NULL DEFAULT '',
-            system_prompt TEXT NOT NULL DEFAULT ''
-        );"
-    ).expect("failed to create tables");
-
-    // Migrate chat_history to add pet_id (added in 0.1.0+)
-    let has_pet_id: bool = conn
-        .prepare("SELECT pet_id FROM chat_history LIMIT 0")
-        .is_ok();
-    if !has_pet_id {
-        if let Err(e) = conn.execute(
-            "ALTER TABLE chat_history ADD COLUMN pet_id TEXT NOT NULL DEFAULT 'cat'",
-            [],
-        ) {
-            tracing::warn!("failed to add pet_id column: {}", e);
-        }
-    }
-
-    // Migrate old ai_config to new api_keys + pet_personas tables
-    let key_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM api_keys", [], |r| r.get(0))
-        .unwrap_or(0);
-    if key_count == 0 {
-        if let Ok(old) = conn.query_row(
-            "SELECT api_key, base_url, model, system_prompt FROM ai_config WHERE id=1",
-            [],
-            |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                ))
-            },
-        ) {
-            let (key, url, model, prompt) = old;
-            if !key.is_empty() {
-                conn.execute(
-                    "INSERT INTO api_keys (provider, api_key, base_url, default_model, is_default) VALUES (?1, ?2, ?3, ?4, 1)",
-                    rusqlite::params!["Default", key, url, model],
-                ).ok();
-            }
-            conn.execute(
-                "INSERT OR IGNORE INTO pet_personas (pet_id, system_prompt) VALUES ('cat', ?1)",
-                rusqlite::params![prompt],
-            ).ok();
-        }
-    }
-
-    // Migrate from old preferences.json
-    let json_path = app_data.join("preferences.json");
-    if json_path.exists() {
-        info!("migrating from preferences.json to SQLite");
-        if let Ok(content) = fs::read_to_string(&json_path) {
-            if let Ok(prefs) = serde_json::from_str::<serde_json::Value>(&content) {
-                let pet_id = prefs.get("activePetId").and_then(|v| v.as_str()).unwrap_or("cat");
-                if let Some(pos) = prefs.get("windowPosition") {
-                    let x = pos.get("x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-                    let y = pos.get("y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-                    let _ = conn.execute(
-                        "UPDATE preferences SET active_pet_id = ?1, window_x = ?2, window_y = ?3 WHERE id = 1",
-                        rusqlite::params![pet_id, x, y],
-                    );
-                } else {
-                    let _ = conn.execute(
-                        "UPDATE preferences SET active_pet_id = ?1 WHERE id = 1",
-                        rusqlite::params![pet_id],
-                    );
-                }
-                if let Some(ai) = prefs.get("aiConfig") {
-                    let api_key = ai.get("apiKey").and_then(|v| v.as_str()).unwrap_or("");
-                    let base_url = ai.get("baseUrl").and_then(|v| v.as_str()).unwrap_or("https://api.deepseek.com");
-                    let model = ai.get("model").and_then(|v| v.as_str()).unwrap_or("DeepSeek-V3");
-                    let system_prompt = ai.get("systemPrompt").and_then(|v| v.as_str()).unwrap_or("");
-                    let idle_chat_enabled = ai.get("idleChatEnabled").and_then(|v| v.as_bool()).unwrap_or(true);
-                    let idle_chat_interval = ai.get("idleChatInterval").and_then(|v| v.as_u64()).unwrap_or(300);
-
-                    let _ = conn.execute(
-                        "UPDATE ai_config SET idle_chat_enabled=?1, idle_chat_interval=?2 WHERE id=1",
-                        rusqlite::params![idle_chat_enabled as i32, idle_chat_interval as i64],
-                    );
-                    if !api_key.is_empty() {
-                        let _ = conn.execute(
-                            "INSERT INTO api_keys (provider, api_key, base_url, default_model, is_default) VALUES ('Default', ?1, ?2, ?3, 1)",
-                            rusqlite::params![api_key, base_url.to_string(), model.to_string()],
-                        );
-                    }
-                    if !system_prompt.is_empty() {
-                        let _ = conn.execute(
-                            "INSERT OR IGNORE INTO pet_personas (pet_id, system_prompt) VALUES ('cat', ?1)",
-                            rusqlite::params![system_prompt.to_string()],
-                        );
-                    }
-                }
-            }
-        }
-        let _ = fs::remove_file(&json_path);
-        info!("migration complete, removed preferences.json");
-    }
-
-    conn
-}
 
 fn init_logging(app_data: &PathBuf) {
     let log_dir = app_data.join("logs");
@@ -221,8 +56,8 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     init_logging(&app_data);
     info!("app data directory: {:?}", app_data);
 
-    init_builtin_pet(&app_data);
-    let db_conn = init_database(&app_data);
+    db::init_builtin_pet(&app_data);
+    let db_conn = db::init_database(&app_data);
     app.manage(Mutex::new(db_conn));
 
     // Auto-install CC hooks on startup
@@ -258,42 +93,6 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn read_ai_config(db: &Connection) -> Option<AiConfig> {
-    let idle = db.query_row(
-        "SELECT idle_chat_enabled, idle_chat_interval FROM ai_config WHERE id=1",
-        [],
-        |row| {
-            Ok((
-                row.get::<_, i32>(0)? != 0,
-                row.get::<_, i64>(1)? as u64,
-            ))
-        },
-    ).unwrap_or((true, 300));
-
-    let mut stmt = db.prepare(
-        "SELECT id, provider, api_key, base_url, default_model, is_default FROM api_keys ORDER BY id ASC"
-    ).ok()?;
-    let keys: Vec<ApiKeyEntry> = stmt
-        .query_map([], |row| {
-            Ok(ApiKeyEntry {
-                id: Some(row.get(0)?),
-                provider: row.get(1)?,
-                api_key: row.get(2)?,
-                base_url: row.get(3)?,
-                default_model: row.get(4)?,
-                is_default: row.get::<_, i32>(5)? != 0,
-            })
-        })
-        .ok()?
-        .filter_map(|r| r.ok())
-        .collect();
-
-    Some(AiConfig {
-        api_keys: keys,
-        idle_chat_enabled: idle.0,
-        idle_chat_interval: idle.1,
-    })
-}
 
 use serde::{Deserialize, Serialize};
 
@@ -354,7 +153,7 @@ pub struct AiConfig {
 }
 
 fn default_base_url() -> String { "https://api.deepseek.com".into() }
-fn default_system_prompt() -> String {
+pub(crate) fn default_system_prompt() -> String {
     "你是一只可爱的桌面宠物猫，名叫小橘。你是主人的编程伙伴，用简短可爱的语气回应，每句话不超过30字。偶尔加个喵~".into()
 }
 fn default_idle_chat_enabled() -> bool { true }
@@ -372,7 +171,7 @@ fn discover_pets(app_handle: tauri::AppHandle) -> Vec<pets::ExternalPetRecord> {
         error!("failed to get app_data dir during pet discovery");
         return Vec::new();
     };
-    let pet_root = app_pets_dir(&app_data);
+    let pet_root = db::app_pets_dir(&app_data);
 
     if !pet_root.exists() {
         let _ = fs::create_dir_all(&pet_root);
@@ -431,7 +230,7 @@ fn load_preferences(app_handle: tauri::AppHandle) -> Preferences {
         },
     ).unwrap_or(Preferences { active_pet_id: "cat".into(), window_position: None, ai_config: None });
 
-    let ai_config = read_ai_config(&db);
+    let ai_config = db::read_ai_config(&db);
     Preferences { ai_config, ..prefs }
 }
 
@@ -1132,7 +931,7 @@ fn uninstall_cc_hooks() -> CcHookResult {
 async fn get_ai_config(app_handle: tauri::AppHandle) -> Option<AiConfig> {
     let state = app_handle.state::<Mutex<Connection>>();
     let db = state.lock().unwrap();
-    read_ai_config(&db)
+    db::read_ai_config(&db)
 }
 
 #[tauri::command]
@@ -1204,52 +1003,6 @@ fn get_all_personas(app_handle: tauri::AppHandle) -> Vec<PetPersona> {
     }).ok().map(|r| r.filter_map(|x| x.ok()).collect()).unwrap_or_default()
 }
 
-fn resolve_pet_ai(db: &Connection, pet_id: &str) -> Option<(ai::AiConnection, String)> {
-    // Get effective key: try pet-specific persona first, fall back to default key
-    let key = db
-        .query_row(
-            "SELECT k.id, k.api_key, k.base_url, k.default_model, p.model_override
-             FROM api_keys k
-             LEFT JOIN pet_personas p ON p.api_key_id = k.id AND p.pet_id = ?1
-             WHERE k.id = COALESCE(
-                 (SELECT api_key_id FROM pet_personas WHERE pet_id = ?1),
-                 (SELECT id FROM api_keys WHERE is_default = 1 LIMIT 1)
-             )
-             LIMIT 1",
-            rusqlite::params![pet_id],
-            |row| {
-                Ok((
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                    row.get::<_, Option<String>>(4)?,
-                ))
-            },
-        )
-        .ok()?;
-
-    let model = key.3.filter(|m| !m.is_empty()).unwrap_or(key.2);
-    let system_prompt = db
-        .query_row(
-            "SELECT system_prompt FROM pet_personas WHERE pet_id = ?1",
-            rusqlite::params![pet_id],
-            |row| row.get::<_, String>(0),
-        )
-        .unwrap_or_else(|_| default_system_prompt());
-
-    Some((
-        ai::AiConnection { api_key: key.0, base_url: key.1, model },
-        system_prompt,
-    ))
-}
-
-fn get_active_pet_id(db: &Connection) -> String {
-    db.query_row(
-        "SELECT active_pet_id FROM preferences WHERE id = 1",
-        [],
-        |row| row.get::<_, String>(0),
-    ).unwrap_or_else(|_| "cat".into())
-}
 
 #[tauri::command]
 async fn chat_with_pet(
@@ -1260,8 +1013,8 @@ async fn chat_with_pet(
     let (conn, prompt) = {
         let state = app_handle.state::<Mutex<Connection>>();
         let db = state.lock().unwrap();
-        let pid = pet_id.unwrap_or_else(|| get_active_pet_id(&db));
-        resolve_pet_ai(&db, &pid).ok_or("AI 未配置，请在 AI 设置中输入 API Key".to_string())?
+        let pid = pet_id.unwrap_or_else(|| db::get_active_pet_id(&db));
+        db::resolve_pet_ai(&db, &pid).ok_or("AI 未配置，请在 AI 设置中输入 API Key".to_string())?
     };
     let mut msgs = vec![ChatMessage { role: "system".into(), content: prompt }];
     msgs.extend(messages);
@@ -1277,8 +1030,8 @@ async fn chat_with_pet_stream(
     let (conn, prompt) = {
         let state = app_handle.state::<Mutex<Connection>>();
         let db = state.lock().unwrap();
-        let pid = pet_id.unwrap_or_else(|| get_active_pet_id(&db));
-        resolve_pet_ai(&db, &pid).ok_or("AI 未配置，请在 AI 设置中输入 API Key".to_string())?
+        let pid = pet_id.unwrap_or_else(|| db::get_active_pet_id(&db));
+        db::resolve_pet_ai(&db, &pid).ok_or("AI 未配置，请在 AI 设置中输入 API Key".to_string())?
     };
     let mut msgs = vec![ChatMessage { role: "system".into(), content: prompt }];
     msgs.extend(messages);
@@ -1294,8 +1047,8 @@ async fn generate_event_reaction(
     let (conn, prompt) = {
         let state = app_handle.state::<Mutex<Connection>>();
         let db = state.lock().unwrap();
-        let pid = pet_id.unwrap_or_else(|| get_active_pet_id(&db));
-        resolve_pet_ai(&db, &pid).ok_or("no config".to_string())?
+        let pid = pet_id.unwrap_or_else(|| db::get_active_pet_id(&db));
+        db::resolve_pet_ai(&db, &pid).ok_or("no config".to_string())?
     };
 
     let desc_map: HashMap<&str, &str> = [
@@ -1391,12 +1144,17 @@ fn open_chat_window(app_handle: tauri::AppHandle, pet_id: String, pet_name: Stri
     let js_emoji = serde_json::to_string(&pet_emoji).unwrap();
 
     if let Some(win) = app_handle.get_webview_window("chat") {
+        // Update globals for backwards compat, then emit event for active listener
         let js = format!(
-            "window.__chatPetId={};window.__chatPetName={};window.__chatPetEmoji={};if(typeof initChat==='function')initChat({},{},{})",
-            js_id, js_name, js_emoji,
+            "window.__chatPetId={};window.__chatPetName={};window.__chatPetEmoji={}",
             js_id, js_name, js_emoji,
         );
         let _ = win.eval(&js);
+        let _ = win.emit("chat-init", serde_json::json!({
+            "petId": pet_id,
+            "petName": pet_name,
+            "petEmoji": pet_emoji,
+        }));
         let _ = win.show();
         let _ = win.set_focus();
         return;
@@ -1490,16 +1248,14 @@ fn show_bubble_window(app_handle: tauri::AppHandle, data: BubbleData) {
         }
     }
 
-    let data_json = serde_json::to_string(&data).unwrap_or_default();
-    let js = format!("bubbleUpdate({})", data_json);
-    let _ = bubble_win.eval(&js);
+    let _ = bubble_win.emit("bubble-update", &data);
     let _ = bubble_win.show();
 }
 
 #[tauri::command]
 fn hide_bubble_window(app_handle: tauri::AppHandle) {
     if let Some(bubble_win) = app_handle.get_webview_window("cc-bubble") {
-        let _ = bubble_win.eval("bubbleUpdate(null)");
+        let _ = bubble_win.emit("bubble-hide", ());
         let _ = bubble_win.hide();
     }
 }

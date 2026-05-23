@@ -15,7 +15,6 @@ interface RoamingState {
   suspended: boolean;
   mode: 'paused' | 'wandering' | 'acting';
   targetX: number;
-  targetY: number;
   speed: number;
   pauseTimer: number;
   direction: 'left' | 'right';
@@ -44,13 +43,11 @@ export class BehaviorEngine {
     suspended: false,
     mode: 'paused',
     targetX: 0,
-    targetY: 0,
     speed: 60,
     pauseTimer: 0,
     direction: 'right',
   };
   private screenW = 1920;
-  private screenH = 1080;
   private currentPosX = 0;
   private _roamingDisplacement = { dx: 0, dy: 0 };
 
@@ -67,12 +64,11 @@ export class BehaviorEngine {
     return this._roamingDisplacement;
   }
 
-  setScreenBounds(w: number, h: number): void {
+  setScreenBounds(w: number): void {
     this.screenW = w;
-    this.screenH = h;
   }
 
-  setCurrentPosition(x: number, _y: number): void {
+  setCurrentPosition(x: number): void {
     this.currentPosX = x;
   }
 
@@ -245,7 +241,6 @@ export class BehaviorEngine {
 
   private pickRandomTarget(): void {
     this.roaming.targetX = EDGE_MARGIN + this.rng() * (this.screenW - 2 * EDGE_MARGIN);
-    this.roaming.targetY = EDGE_MARGIN + this.rng() * (this.screenH - 2 * EDGE_MARGIN);
   }
 
   handleClick(): void {

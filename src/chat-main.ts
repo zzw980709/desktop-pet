@@ -166,14 +166,14 @@ async function sendMessage(): Promise<void> {
   inputEl.focus();
 }
 
-// Called from Rust via eval when switching pets
-(window as any).initChat = function (petId: string, petName: string, petEmoji: string): void {
-  currentPetId = petId;
-  currentPetName = petName;
-  currentPetEmoji = petEmoji;
+// Listen for pet switch events from Rust
+void listen<{ petId: string; petName: string; petEmoji: string }>('chat-init', (event) => {
+  currentPetId = event.payload.petId;
+  currentPetName = event.payload.petName;
+  currentPetEmoji = event.payload.petEmoji;
   updateHeader();
   void loadHistory();
-};
+});
 
 inputEl.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {

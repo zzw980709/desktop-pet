@@ -1,8 +1,20 @@
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 use tauri::Emitter;
 use tracing::info;
 
 use crate::ChatMessage;
+
+fn http_client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .pool_idle_timeout(std::time::Duration::from_secs(90))
+            .timeout(std::time::Duration::from_secs(120))
+            .build()
+            .expect("failed to create HTTP client")
+    })
+}
 
 pub struct AiConnection {
     pub api_key: String,
@@ -79,15 +91,11 @@ pub async fn chat(
 
     info!("ai::chat to {} model {}", url, conn.model);
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(timeout_secs))
-        .build()
-        .map_err(|e| AiError::Network(e.to_string()))?;
-
-    let response = client
+    let response = http_client()
         .post(&url)
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", conn.api_key))
+        .timeout(std::time::Duration::from_secs(timeout_secs))
         .json(&request_body)
         .send()
         .await
@@ -139,15 +147,11 @@ pub async fn chat_stream(
         max_tokens: Some(1024),
     };
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(timeout_secs + 10))
-        .build()
-        .map_err(|e| AiError::Network(e.to_string()))?;
-
-    let response = client
+    let response = http_client()
         .post(&url)
         .header("Authorization", format!("Bearer {}", conn.api_key))
         .header("Content-Type", "application/json")
+        .timeout(std::time::Duration::from_secs(timeout_secs + 10))
         .json(&request_body)
         .send()
         .await

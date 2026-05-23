@@ -13,6 +13,7 @@ import { CELL_HEIGHT, CELL_WIDTH } from './pets/contract';
 import { discoverPets } from './pets/catalog';
 import type { PetCatalogEntry, PetState, Preferences } from './types';
 import { setConfig, getConfig, isConfigValid } from './ai/chat';
+import { showBubble, handleCcEvent, isBubbleActive } from './ui/cc-events';
 
 const DRAG_ANIMATED_STATES = new Set(['running-right', 'running-left']);
 const EDGE_DETECT_MARGIN = 40;
@@ -188,158 +189,26 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
 
   // Initialize roaming with screen bounds
   let screenW = 1920;
-  let screenH = 1080;
   let cachedRoamX = 0;
-  let cachedRoamY = 0;
+  let roamBaseY = 0;
   const initPos = await getCurrentWindow().outerPosition().catch(() => null);
   if (initPos) {
     cachedRoamX = initPos.x;
-    cachedRoamY = initPos.y;
+    roamBaseY = initPos.y;
   }
   const mon = await currentMonitor().catch(() => null);
   if (mon) {
     const scale = mon.scaleFactor;
     screenW = mon.size.width / scale;
-    screenH = mon.size.height / scale;
   }
   // Roaming disabled — pet stays where placed
-  // behavior.setScreenBounds(screenW, screenH);
-  // behavior.setCurrentPosition(cachedRoamX, cachedRoamY);
+  // behavior.setScreenBounds(screenW);
+  // behavior.setCurrentPosition(cachedRoamX);
   // behavior.startRoaming();
 
   let heartAlpha = 0;
   const HEART_DURATION = 600;
   let heartTimer = 0;
-
-  interface CcEventConfig {
-    state: PetState;
-    bubbleText: string;
-    emoji: string;
-    bgColor: string;
-    borderColor: string;
-    persistent: boolean;
-  }
-
-  const ccEventConfig: Record<string, CcEventConfig> = {
-    'thinking': {
-      state: 'review',
-      bubbleText: 'Thinking...',
-      emoji: '💭',
-      bgColor: '#e3f2fd',
-      borderColor: '#90caf9',
-      persistent: true,
-    },
-    'tool-bash': {
-      state: 'running',
-      bubbleText: 'Running command...',
-      emoji: '⚡',
-      bgColor: '#e1f5fe',
-      borderColor: '#4fc3f7',
-      persistent: true,
-    },
-    'tool-edit': {
-      state: 'review',
-      bubbleText: 'Editing code...',
-      emoji: '✏️',
-      bgColor: '#e8f5e9',
-      borderColor: '#81c784',
-      persistent: true,
-    },
-    'tool-write': {
-      state: 'running',
-      bubbleText: 'Writing file...',
-      emoji: '💾',
-      bgColor: '#e8f5e9',
-      borderColor: '#66bb6a',
-      persistent: true,
-    },
-    'tool-web': {
-      state: 'review',
-      bubbleText: 'Browsing...',
-      emoji: '🌐',
-      bgColor: '#f3e5f5',
-      borderColor: '#ce93d8',
-      persistent: true,
-    },
-    'tool-calling': {
-      state: 'running',
-      bubbleText: 'Using tools...',
-      emoji: '🔧',
-      bgColor: '#f5f5f5',
-      borderColor: '#bdbdbd',
-      persistent: true,
-    },
-    'waiting': {
-      state: 'waiting',
-      bubbleText: 'Waiting...',
-      emoji: '⏳',
-      bgColor: '#fff3e0',
-      borderColor: '#ffb74d',
-      persistent: true,
-    },
-    'context-compacted': {
-      state: 'failed',
-      bubbleText: 'Compacted',
-      emoji: '📦',
-      bgColor: '#fce4ec',
-      borderColor: '#e57373',
-      persistent: false,
-    },
-    'completion': {
-      state: 'waving',
-      bubbleText: 'Done!',
-      emoji: '✅',
-      bgColor: '#e8f5e9',
-      borderColor: '#66bb6a',
-      persistent: false,
-    },
-  };
-
-  let bubbleActive = false;
-  let bubbleHideTimer: ReturnType<typeof setTimeout> | null = null;
-  const BUBBLE_TRANSIENT_VISIBLE_MS = 2500;
-
-  function showBubble(config: CcEventConfig): void {
-    if (bubbleHideTimer) {
-      clearTimeout(bubbleHideTimer);
-      bubbleHideTimer = null;
-    }
-    bubbleActive = true;
-    void invoke('show_bubble_window', {
-      data: {
-        text: config.bubbleText,
-        emoji: config.emoji,
-        bgColor: config.bgColor,
-        borderColor: config.borderColor,
-      },
-    });
-    const timeout = config.persistent ? 8000 : BUBBLE_TRANSIENT_VISIBLE_MS;
-    bubbleHideTimer = setTimeout(() => {
-      void invoke('hide_bubble_window');
-      bubbleActive = false;
-    }, timeout);
-  }
-
-  async function handleCcEvent(eventName: string): Promise<void> {
-    const config = ccEventConfig[eventName];
-    if (!config) return;
-
-    behavior.forceState(config.state);
-    animator.play(config.state);
-
-    // Try AI reaction first, fallback to static text
-    if (isConfigValid()) {
-      try {
-        const reaction = await invoke<string>('generate_event_reaction', { event: eventName, petId: activePet.id });
-        showBubble({ ...config, bubbleText: reaction });
-        return;
-      } catch {
-        // Fall through to static text
-      }
-    }
-
-    showBubble(config);
-  }
   let edgeRedirectCooldown = 0;
   let aiIdleAccumulator = 0;
 
@@ -417,7 +286,12 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
   // CC Hook event listener with AI-powered reactions
   void listen<string>('cc-event', (event) => {
     try {
-      handleCcEvent(event.payload);
+      handleCcEvent(event.payload, {
+        forceState: (s) => behavior.forceState(s),
+        playAnimation: (s) => animator.play(s),
+        isConfigValid,
+        activePetId: activePet.id,
+      });
     } catch (err) {
       console.error('[app] cc-event error:', err);
     }
@@ -427,7 +301,7 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
 
   // Sync bubble position when pet window moves
   void getCurrentWindow().onMoved(() => {
-    if (bubbleActive) {
+    if (isBubbleActive()) {
       void invoke('sync_bubble_position');
     }
   });
@@ -466,22 +340,22 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
 
       // Feed current position before tick so behavior can compute target
       if (behavior.roamingActive) {
-        behavior.setCurrentPosition(cachedRoamX, cachedRoamY);
+        behavior.setCurrentPosition(cachedRoamX);
       }
 
       behavior.tick(deltaMs);
 
       // Idle AI chatter
       const aiCfg = getConfig();
-      if (behavior.currentState === 'idle' && aiCfg?.idleChatEnabled && !bubbleActive) {
+      if (behavior.currentState === 'idle' && aiCfg?.idleChatEnabled && !isBubbleActive()) {
         aiIdleAccumulator += deltaMs;
         const intervalMs = aiCfg.idleChatInterval * 1000;
         if (aiIdleAccumulator >= intervalMs) {
           aiIdleAccumulator = 0;
-          if (Math.random() < 0.1 && !bubbleActive && behavior.currentState === 'idle') {
+          if (Math.random() < 0.1 && !isBubbleActive() && behavior.currentState === 'idle') {
             invoke<string>('generate_event_reaction', { event: 'idle' })
               .then((text) => {
-                if (bubbleActive) return;
+                if (isBubbleActive()) return;
                 showBubble({ state: 'idle', bubbleText: text, emoji: '😺', bgColor: '#fff3e0', borderColor: '#ffb74d', persistent: false });
               })
               .catch(() => {});
@@ -495,14 +369,12 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
       // Apply roaming displacement after tick
       if (behavior.roamingActive) {
         const disp = behavior.roamingDisplacement;
-        if (disp.dx !== 0 || disp.dy !== 0) {
+        if (disp.dx !== 0) {
           cachedRoamX += disp.dx;
-          cachedRoamY += disp.dy;
 
           // Clamp to screen bounds (account for window size)
-          const { w, h } = getWindowSize(canvas);
+          const { w } = getWindowSize(canvas);
           cachedRoamX = Math.max(0, Math.min(cachedRoamX, screenW - w));
-          cachedRoamY = Math.max(0, Math.min(cachedRoamY, screenH - h));
 
           // Edge detection with cooldown to prevent rapid-fire retargeting
           edgeRedirectCooldown = Math.max(0, edgeRedirectCooldown - deltaMs);
@@ -517,7 +389,7 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
           }
 
           getCurrentWindow().setPosition(
-            new LogicalPosition(cachedRoamX, cachedRoamY),
+            new LogicalPosition(cachedRoamX, roamBaseY),
           ).catch(() => {});
         }
       }
