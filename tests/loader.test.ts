@@ -104,10 +104,10 @@ describe('validatePetManifest', () => {
 });
 
 describe('validatePetSpritesheet', () => {
-  it('requires the fixed 8-column atlas with at least 9 rows', () => {
-    const valid = { naturalWidth: CELL_WIDTH * ATLAS_COLUMNS, naturalHeight: CELL_HEIGHT * 9 } as HTMLImageElement;
-    const invalidWidth = { naturalWidth: CELL_WIDTH * 6, naturalHeight: CELL_HEIGHT * 9 } as HTMLImageElement;
-    const invalidHeight = { naturalWidth: CELL_WIDTH * ATLAS_COLUMNS, naturalHeight: CELL_HEIGHT * 8 } as HTMLImageElement;
+  it('requires the fixed 8-column atlas with at least 8 rows', () => {
+    const valid = { naturalWidth: CELL_WIDTH * ATLAS_COLUMNS, naturalHeight: CELL_HEIGHT * 8 } as HTMLImageElement;
+    const invalidWidth = { naturalWidth: CELL_WIDTH * 6, naturalHeight: CELL_HEIGHT * 8 } as HTMLImageElement;
+    const invalidHeight = { naturalWidth: CELL_WIDTH * ATLAS_COLUMNS, naturalHeight: CELL_HEIGHT * 7 } as HTMLImageElement;
 
     expect(validatePetSpritesheet(valid)).toBe(true);
     expect(validatePetSpritesheet(invalidWidth)).toBe(false);

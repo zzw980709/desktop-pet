@@ -1,20 +1,8 @@
 use serde::{Deserialize, Serialize};
-use std::sync::OnceLock;
 use tauri::Emitter;
 use tracing::info;
 
 use crate::ChatMessage;
-
-fn http_client() -> &'static reqwest::Client {
-    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-    CLIENT.get_or_init(|| {
-        reqwest::Client::builder()
-            .pool_idle_timeout(std::time::Duration::from_secs(90))
-            .timeout(std::time::Duration::from_secs(120))
-            .build()
-            .expect("failed to create HTTP client")
-    })
-}
 
 pub struct AiConnection {
     pub api_key: String,
@@ -91,11 +79,15 @@ pub async fn chat(
 
     info!("ai::chat to {} model {}", url, conn.model);
 
-    let response = http_client()
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_secs))
+        .build()
+        .map_err(|e| AiError::Network(e.to_string()))?;
+
+    let response = client
         .post(&url)
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", conn.api_key))
-        .timeout(std::time::Duration::from_secs(timeout_secs))
         .json(&request_body)
         .send()
         .await
@@ -140,18 +132,25 @@ pub async fn chat_stream(
 ) -> Result<String, AiError> {
     let url = format!("{}/v1/chat/completions", conn.base_url.trim_end_matches('/'));
 
-    let request_body = ChatRequest {
-        model: conn.model.clone(),
-        messages: messages.to_vec(),
-        stream: true,
-        max_tokens: Some(1024),
-    };
+    let request_body = serde_json::json!({
+        "model": conn.model,
+        "messages": messages.iter().map(|m| serde_json::json!({
+            "role": m.role,
+            "content": m.content,
+        })).collect::<Vec<_>>(),
+        "stream": true,
+        "max_tokens": 1024,
+    });
 
-    let response = http_client()
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_secs + 10))
+        .build()
+        .map_err(|e| AiError::Network(e.to_string()))?;
+
+    let response = client
         .post(&url)
         .header("Authorization", format!("Bearer {}", conn.api_key))
         .header("Content-Type", "application/json")
-        .timeout(std::time::Duration::from_secs(timeout_secs + 10))
         .json(&request_body)
         .send()
         .await
@@ -167,8 +166,7 @@ pub async fn chat_stream(
 
     let status = response.status();
     if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
-        let body = response.text().await.unwrap_or_default();
-        return Err(AiError::Unauthorized(body));
+        return Err(AiError::Unauthorized(String::new()));
     }
 
     if !status.is_success() {
@@ -178,46 +176,17 @@ pub async fn chat_stream(
 
     let mut full_text = String::new();
     let mut stream = response.bytes_stream();
-    let mut line_buf = String::new();
     use futures_util::StreamExt;
 
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| AiError::Network(e.to_string()))?;
         let text = String::from_utf8_lossy(&chunk);
-        line_buf.push_str(&text);
-        // Process complete lines; keep the trailing partial line in line_buf
-        let mut data_text = String::new();
-        while let Some(pos) = line_buf.find('\n') {
-            let line = line_buf[..pos].trim_end_matches('\r').to_string();
-            line_buf = line_buf[pos + 1..].to_string();
-
-            if line.is_empty() {
-                // Empty line = event boundary, flush accumulated data
-                if !data_text.is_empty() {
-                    if data_text != "[DONE]" {
-                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data_text) {
-                            if let Some(content) = parsed["choices"][0]["delta"]["content"].as_str() {
-                                full_text.push_str(content);
-                                let _ = app_handle.emit_to("chat", "chat-stream-token", content);
-                            }
-                        }
-                    }
-                    data_text.clear();
-                }
-                continue;
-            }
-
+        for line in text.lines() {
             if let Some(data) = line.strip_prefix("data: ") {
-                if !data_text.is_empty() {
-                    data_text.push('\n');
+                if data == "[DONE]" {
+                    continue;
                 }
-                data_text.push_str(data);
-            }
-        }
-        // Flush any remaining data at end of stream (no trailing empty line)
-        if line_buf.is_empty() && !data_text.is_empty() {
-            if data_text != "[DONE]" {
-                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data_text) {
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
                     if let Some(content) = parsed["choices"][0]["delta"]["content"].as_str() {
                         full_text.push_str(content);
                         let _ = app_handle.emit_to("chat", "chat-stream-token", content);

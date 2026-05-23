@@ -108,24 +108,6 @@ async function sendMessage(): Promise<void> {
   appendMessage('user', msg);
   void invoke('save_chat_message', { petId: currentPetId, role: 'user', content: msg });
 
-  // Load persona and history for context
-  let systemPrompt = '';
-  let history: HistoryEntry[] = [];
-  try {
-    const persona = await invoke<{ systemPrompt: string } | null>('get_pet_persona', { petId: currentPetId });
-    systemPrompt = persona?.systemPrompt ?? '';
-    history = await invoke<HistoryEntry[]>('load_chat_history', { petId: currentPetId });
-  } catch { /* use defaults */ }
-
-  const messages: Array<{ role: string; content: string }> = [];
-  if (systemPrompt) {
-    messages.push({ role: 'system', content: systemPrompt });
-  }
-  for (const h of history) {
-    messages.push({ role: h.role, content: h.content });
-  }
-  messages.push({ role: 'user', content: msg });
-
   if (isFullMode) {
     const loadingEl = appendMessage('loading', '');
     loadingEl.className = 'msg assistant';
@@ -138,7 +120,9 @@ async function sendMessage(): Promise<void> {
 
     let reply = '';
     try {
-      reply = await invoke<string>('chat_with_pet_stream', { messages });
+      reply = await invoke<string>('chat_with_pet_stream', {
+        messages: [{ role: 'system', content: '' }, { role: 'user', content: msg }],
+      });
       if (!reply) loadingEl.textContent = loadingEl.textContent || '(empty)';
     } catch (e) {
       loadingEl.textContent = String(e);
@@ -151,7 +135,9 @@ async function sendMessage(): Promise<void> {
   } else {
     const loadingEl = appendMessage('loading', '');
     try {
-      const reply = await invoke<string>('chat_with_pet', { messages });
+      const reply = await invoke<string>('chat_with_pet', {
+        messages: [{ role: 'system', content: '' }, { role: 'user', content: msg }],
+      });
       loadingEl.remove();
       appendMessage('assistant', reply);
       void invoke('save_chat_message', { petId: currentPetId, role: 'assistant', content: reply });
@@ -166,14 +152,14 @@ async function sendMessage(): Promise<void> {
   inputEl.focus();
 }
 
-// Listen for pet switch events from Rust
-void listen<{ petId: string; petName: string; petEmoji: string }>('chat-init', (event) => {
-  currentPetId = event.payload.petId;
-  currentPetName = event.payload.petName;
-  currentPetEmoji = event.payload.petEmoji;
+// Called from Rust via eval when switching pets
+(window as any).initChat = function (petId: string, petName: string, petEmoji: string): void {
+  currentPetId = petId;
+  currentPetName = petName;
+  currentPetEmoji = petEmoji;
   updateHeader();
   void loadHistory();
-});
+};
 
 inputEl.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
