@@ -87,10 +87,17 @@ fn init_database(app_data: &PathBuf) -> Connection {
     ).expect("failed to create tables");
 
     // Migrate chat_history to add pet_id (added in 0.1.0+)
-    let _ = conn.execute(
-        "ALTER TABLE chat_history ADD COLUMN pet_id TEXT NOT NULL DEFAULT 'cat'",
-        [],
-    );
+    let has_pet_id: bool = conn
+        .prepare("SELECT pet_id FROM chat_history LIMIT 0")
+        .is_ok();
+    if !has_pet_id {
+        if let Err(e) = conn.execute(
+            "ALTER TABLE chat_history ADD COLUMN pet_id TEXT NOT NULL DEFAULT 'cat'",
+            [],
+        ) {
+            tracing::warn!("failed to add pet_id column: {}", e);
+        }
+    }
 
     // Migrate old ai_config to new api_keys + pet_personas tables
     let key_count: i64 = conn
@@ -180,25 +187,31 @@ fn init_database(app_data: &PathBuf) -> Connection {
 fn init_logging(app_data: &PathBuf) {
     let log_dir = app_data.join("logs");
     let _ = fs::create_dir_all(&log_dir);
-    let file_appender = RollingFileAppender::builder()
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info"));
+
+    let file_result = RollingFileAppender::builder()
         .rotation(tracing_appender::rolling::Rotation::DAILY)
         .filename_prefix("pet")
         .filename_suffix("log")
         .max_log_files(5)
-        .build(log_dir)
-        .unwrap();
-    let file_layer = fmt::layer()
-        .with_ansi(false)
-        .with_writer(file_appender);
-    let stdout_layer = fmt::layer()
-        .with_writer(std::io::stdout);
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
-    tracing_subscriber::registry()
-        .with(filter)
-        .with(file_layer)
-        .with(stdout_layer)
-        .init();
+        .build(log_dir);
+
+    match file_result {
+        Ok(file_appender) => {
+            tracing_subscriber::registry()
+                .with(filter)
+                .with(fmt::layer().with_ansi(false).with_writer(file_appender))
+                .with(fmt::layer().with_writer(std::io::stdout))
+                .init();
+        }
+        Err(_) => {
+            tracing_subscriber::registry()
+                .with(filter)
+                .with(fmt::layer().with_writer(std::io::stdout))
+                .init();
+        }
+    }
 }
 
 fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
@@ -502,7 +515,16 @@ fn generate_pet_id(display_name: &str) -> String {
         .map(|c| if c.is_alphanumeric() { c } else { '-' })
         .collect();
     let trimmed = id.trim_matches('-');
-    if trimmed.is_empty() { "custom-pet".into() } else { trimmed.to_string() }
+    if trimmed.is_empty() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() % 100000)
+            .unwrap_or(0);
+        format!("custom-pet-{}", ts)
+    } else {
+        trimmed.to_string()
+    }
 }
 
 #[tauri::command]
@@ -1364,15 +1386,15 @@ fn load_chat_history(app_handle: tauri::AppHandle, pet_id: String) -> Vec<ChatHi
 
 #[tauri::command]
 fn open_chat_window(app_handle: tauri::AppHandle, pet_id: String, pet_name: String, pet_emoji: String) {
-    let escaped_id = pet_id.replace('\\', "\\\\").replace('\'', "\\'");
-    let escaped_name = pet_name.replace('\\', "\\\\").replace('\'', "\\'");
-    let escaped_emoji = pet_emoji.replace('\\', "\\\\").replace('\'', "\\'");
+    let js_id = serde_json::to_string(&pet_id).unwrap();
+    let js_name = serde_json::to_string(&pet_name).unwrap();
+    let js_emoji = serde_json::to_string(&pet_emoji).unwrap();
 
     if let Some(win) = app_handle.get_webview_window("chat") {
         let js = format!(
-            "window.__chatPetId='{}';window.__chatPetName='{}';window.__chatPetEmoji='{}';if(typeof initChat==='function')initChat('{}','{}','{}')",
-            escaped_id, escaped_name, escaped_emoji,
-            escaped_id, escaped_name, escaped_emoji,
+            "window.__chatPetId={};window.__chatPetName={};window.__chatPetEmoji={};if(typeof initChat==='function')initChat({},{},{})",
+            js_id, js_name, js_emoji,
+            js_id, js_name, js_emoji,
         );
         let _ = win.eval(&js);
         let _ = win.show();
@@ -1389,8 +1411,11 @@ fn open_chat_window(app_handle: tauri::AppHandle, pet_id: String, pet_name: Stri
                 let main_right = pos.x as f64 / scale + size.width as f64 / scale;
                 x = main_right + 8.0;
                 y = pos.y as f64 / scale;
-                if x + 340.0 > 1920.0 {
-                    x = pos.x as f64 / scale - 348.0;
+                if let Ok(Some(monitor)) = main_win.current_monitor() {
+                    let screen_w = monitor.size().width as f64 / scale;
+                    if x + 340.0 > screen_w {
+                        x = pos.x as f64 / scale - 348.0;
+                    }
                 }
                 if x < 0.0 { x = 100.0; }
             }
@@ -1410,8 +1435,8 @@ fn open_chat_window(app_handle: tauri::AppHandle, pet_id: String, pet_name: Stri
 
     if let Ok(w) = builder.build() {
         let js = format!(
-            "window.__chatPetId='{}';window.__chatPetName='{}';window.__chatPetEmoji='{}'",
-            escaped_id, escaped_name, escaped_emoji,
+            "window.__chatPetId={};window.__chatPetName={};window.__chatPetEmoji={}",
+            js_id, js_name, js_emoji,
         );
         let _ = w.eval(&js);
     }

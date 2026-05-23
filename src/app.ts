@@ -478,7 +478,7 @@ export async function initApp(canvas: HTMLCanvasElement): Promise<void> {
         const intervalMs = aiCfg.idleChatInterval * 1000;
         if (aiIdleAccumulator >= intervalMs) {
           aiIdleAccumulator = 0;
-          if (Math.random() < 0.1) {
+          if (Math.random() < 0.1 && !bubbleActive && behavior.currentState === 'idle') {
             invoke<string>('generate_event_reaction', { event: 'idle' })
               .then((text) => {
                 if (bubbleActive) return;

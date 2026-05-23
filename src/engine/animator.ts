@@ -109,7 +109,10 @@ export class Animator {
 
     this.elapsed += deltaMs;
 
-    while (this.elapsed + 0.5 >= spec.durationsMs[this.currentFrameIndex]) {
+    let iterations = 0;
+    const maxIterations = spec.usedColumns.length * 2;
+    while (this.elapsed + 0.5 >= spec.durationsMs[this.currentFrameIndex] && iterations < maxIterations) {
+      iterations++;
       this.elapsed -= spec.durationsMs[this.currentFrameIndex];
       const lastFrame = this.currentFrameIndex === spec.usedColumns.length - 1;
 
@@ -127,6 +130,11 @@ export class Animator {
       }
 
       this.syncCell();
+    }
+    if (iterations >= maxIterations) {
+      console.warn('[animator] tick exceeded max iterations, resetting');
+      this.currentFrameIndex = 0;
+      this.elapsed = 0;
     }
   }
 

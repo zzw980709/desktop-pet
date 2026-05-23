@@ -60,7 +60,8 @@ impl CcHookServer {
 
     pub fn shutdown(&self) {
         self.running.store(false, Ordering::Release);
-        let _ = TcpStream::connect(format!("127.0.0.1:{}", CC_HOOK_PORT));
+        let addr: std::net::SocketAddr = format!("127.0.0.1:{}", CC_HOOK_PORT).parse().unwrap();
+        let _ = TcpStream::connect_timeout(&addr, Duration::from_secs(1));
     }
 }
 
@@ -109,7 +110,8 @@ fn handle_connection(mut stream: TcpStream, app_handle: tauri::AppHandle) {
             }
         }
 
-        if content_length == 0 {
+        const MAX_BODY_SIZE: usize = 64 * 1024;
+        if content_length == 0 || content_length > MAX_BODY_SIZE {
             let _ = stream.write_all(http_err_response());
             return;
         }
