@@ -11,7 +11,7 @@ import { NativeAppMenu } from './ui/appmenu';
 import type { MenuAction } from './ui/menu-model';
 import { CELL_HEIGHT, CELL_WIDTH } from './pets/contract';
 import { discoverPets } from './pets/catalog';
-import type { PetCatalogEntry, PetState, Preferences } from './types';
+import type { PetCatalogEntry, Preferences } from './types';
 import { setConfig, getConfig, isConfigValid } from './ai/chat';
 import { showBubble, handleCcEvent, isBubbleActive } from './ui/cc-events';
 
